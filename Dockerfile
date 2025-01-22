@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.22.1-bullseye AS builder
+FROM golang:1.23.5-bookworm AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY . .
 RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o /analyzer ./cmd/api/
 
 # Runtime stage
-FROM gcr.io/distroless/base-debian11
+FROM gcr.io/distroless/base-debian12
 
 # Install runtime dependencies
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libopencv* /usr/lib/x86_64-linux-gnu/
