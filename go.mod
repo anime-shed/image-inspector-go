@@ -5,7 +5,6 @@ go 1.23.5
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.5.0
 	github.com/gin-gonic/gin v1.10.0
-	gocv.io/x/gocv v0.40.0
 )
 
 require (
