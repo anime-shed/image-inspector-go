@@ -36,10 +36,10 @@ func (a *imageAnalyzer) Analyze(img image.Image) AnalysisResult {
 	variance := a.computeLaplacianVariance(gray)
 
 	return AnalysisResult{
-		Overexposed:    metrics.avgLuminance > 200,
-		Oversaturated:  metrics.avgSaturation > 0.6,
+		Overexposed:    metrics.avgLuminance > 0.8,
+		Oversaturated:  metrics.avgSaturation > 0.7,
 		IncorrectWB:    a.hasWhiteBalanceIssue(metrics.avgR, metrics.avgG, metrics.avgB),
-		Blurry:         variance < 100,
+		Blurry:         variance < 150,
 		LaplacianVar:   variance,
 		AvgLuminance:   metrics.avgLuminance,
 		AvgSaturation:  metrics.avgSaturation,
@@ -142,7 +142,9 @@ func (a *imageAnalyzer) computeLaplacianVariance(gray *image.Gray) float64 {
 }
 
 func (a *imageAnalyzer) hasWhiteBalanceIssue(avgR, avgG, avgB float64) bool {
-	maxAvg := math.Max(math.Max(avgR, avgG), avgB)
-	minAvg := math.Min(math.Min(avgR, avgG), avgB)
-	return maxAvg > 1.8*minAvg
+	avg := (avgR + avgG + avgB) / 3
+	maxDeviation := 0.15 * avg // 15% tolerance
+	return math.Abs(avgR-avg) > maxDeviation ||
+		math.Abs(avgG-avg) > maxDeviation ||
+		math.Abs(avgB-avg) > maxDeviation
 }
