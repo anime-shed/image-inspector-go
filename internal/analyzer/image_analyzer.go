@@ -56,19 +56,38 @@ func (a *imageAnalyzer) calculateMetrics(img image.Image, bounds image.Rectangle
 	var totalLum, totalSat, totalR, totalG, totalB float64
 	pixelCount := float64(bounds.Dx() * bounds.Dy())
 
+	type result struct {
+		lum, sat, r, g, b float64
+	}
+
+	results := make(chan result, bounds.Dy())
+
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, _ := img.At(x, y).RGBA()
-			rf, gf, bf := float64(r>>8), float64(g>>8), float64(b>>8)
+		go func(y int) {
+			var lum, sat, r, g, b float64
+			for x := bounds.Min.X; x < bounds.Max.X; x++ {
+				rVal, gVal, bVal, _ := img.At(x, y).RGBA()
+				rf, gf, bf := float64(rVal>>8), float64(gVal>>8), float64(bVal>>8)
 
-			_, s, v := a.rgbToHSV(rf, gf, bf)
-			totalSat += s
-			totalLum += v
+				_, s, v := a.rgbToHSV(rf, gf, bf)
+				sat += s
+				lum += v
 
-			totalR += rf
-			totalG += gf
-			totalB += bf
-		}
+				r += rf
+				g += gf
+				b += bf
+			}
+			results <- result{lum, sat, r, g, b}
+		}(y)
+	}
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		res := <-results
+		totalLum += res.lum
+		totalSat += res.sat
+		totalR += res.r
+		totalG += res.g
+		totalB += res.b
 	}
 
 	return metrics{
