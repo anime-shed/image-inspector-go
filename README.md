@@ -52,10 +52,13 @@ Go Image Analyzer is a web server application written in Go that fetches images 
 The application can be configured using environment variables. The following variables are available:
 
 - `SERVER_ADDRESS`: The address on which the server will listen (e.g., `:8080`).
+- `GIN_MODE`: The mode in which Gin should run (e.g., `release` for production).
 
 ## API Endpoints
 
-- `GET /inspect?url={image_url}`: Fetch and analyze the image from the specified URL.
+- `POST /inspect`: Analyze an image with additional options:
+   - `url`: The URL of the image to be analyzed.
+   - `is_ocr`: (optional) Boolean flag to enable OCR-specific thresholds.
 
 ## Contributing
 
@@ -63,7 +66,4 @@ Contributions are welcome! Please open an issue or submit a pull request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-```
-
-Feel free to copy and use this as your project's README.
+This project is licensed under the MIT License - see the [MIT](MIT) file for details.
