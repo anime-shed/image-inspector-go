@@ -10,4 +10,7 @@ RUN addgroup -S nonroot && adduser -S nonroot -G nonroot
 COPY --from=builder /analyzer /analyzer
 USER nonroot:nonroot
 EXPOSE 8080
+
+ENV GIN_MODE=release
+
 ENTRYPOINT ["/analyzer"]
