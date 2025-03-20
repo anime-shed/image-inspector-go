@@ -18,7 +18,7 @@ type AnalysisResult struct {
 }
 
 type ImageAnalyzer interface {
-	Analyze(img image.Image) AnalysisResult
+	Analyze(img image.Image, isOCR bool) AnalysisResult
 }
 
 type imageAnalyzer struct{}
@@ -27,7 +27,7 @@ func NewImageAnalyzer() ImageAnalyzer {
 	return &imageAnalyzer{}
 }
 
-func (a *imageAnalyzer) Analyze(img image.Image) AnalysisResult {
+func (a *imageAnalyzer) Analyze(img image.Image, isOCR bool) AnalysisResult {
 	bounds := img.Bounds()
 	gray := image.NewGray(bounds)
 	draw.Draw(gray, bounds, img, bounds.Min, draw.Src)
@@ -35,11 +35,21 @@ func (a *imageAnalyzer) Analyze(img image.Image) AnalysisResult {
 	metrics := a.calculateMetrics(img, bounds)
 	variance := a.computeLaplacianVariance(gray)
 
+	overexposedThreshold := 0.8
+	oversaturatedThreshold := 0.7
+	blurryThreshold := 150.0
+
+	if isOCR {
+		overexposedThreshold = 0.75
+		oversaturatedThreshold = 0.65
+		blurryThreshold = 200.0
+	}
+
 	return AnalysisResult{
-		Overexposed:    metrics.avgLuminance > 0.8,
-		Oversaturated:  metrics.avgSaturation > 0.7,
+		Overexposed:    metrics.avgLuminance > overexposedThreshold || metrics.avgLuminance < 0.15,
+		Oversaturated:  metrics.avgSaturation > oversaturatedThreshold,
 		IncorrectWB:    a.hasWhiteBalanceIssue(metrics.avgR, metrics.avgG, metrics.avgB),
-		Blurry:         variance < 150,
+		Blurry:         variance < blurryThreshold,
 		LaplacianVar:   variance,
 		AvgLuminance:   metrics.avgLuminance,
 		AvgSaturation:  metrics.avgSaturation,

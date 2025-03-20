@@ -18,7 +18,8 @@ const (
 )
 
 type AnalysisRequest struct {
-	URL string `json:"url" binding:"required,url"`
+	URL   string `json:"url" binding:"required,url"`
+	IsOCR bool   `json:"is_ocr,omitempty"`
 }
 
 type ErrorResponse struct {
@@ -59,7 +60,7 @@ func analyzeImage(a analyzer.ImageAnalyzer, f storage.ImageFetcher) gin.HandlerF
 			return
 		}
 
-		result := a.Analyze(img)
+		result := a.Analyze(img, req.IsOCR)
 		c.JSON(http.StatusOK, result)
 	}
 }
