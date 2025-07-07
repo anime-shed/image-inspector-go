@@ -17,6 +17,7 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+RUN go mod tidy
 
 # Build with CGO enabled for Tesseract support
 RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o /analyzer ./cmd/api/

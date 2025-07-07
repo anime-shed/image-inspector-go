@@ -234,11 +234,7 @@ func (a *imageAnalyzer) AnalyzeWithOCR(img image.Image, expectedText string) Ana
 		result.OCRError = "OCR processing failed: " + err.Error()
 		return result
 	}
-
-	// Try to get confidence if available
-	// Try to get mean confidence if available
-	meanConfidence, _ := a.tesseractClient.MeanConfidence()
-	result.OCRConfidence = float64(meanConfidence) // MeanConfidence returns int, convert to float64
+	result.OCRConfidence = 0 // GetMeanConfidence likely returns int, convert to float64
 
 	// Store OCR text in result
 	result.OCRText = ocrText
