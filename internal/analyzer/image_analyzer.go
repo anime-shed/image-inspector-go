@@ -24,11 +24,10 @@ type AnalysisResult struct {
 	AvgSaturation  float64    `json:"average_saturation"`
 	ChannelBalance [3]float64 `json:"channel_balance"`
 	// OCR related fields
-	OCRText       string  `json:"ocr_text,omitempty"`
-	WER           float64 `json:"word_error_rate,omitempty"`
-	CER           float64 `json:"character_error_rate,omitempty"`
-	OCRConfidence float64 `json:"ocr_confidence,omitempty"`
-	OCRError      string  `json:"ocr_error,omitempty"`
+	OCRText  string  `json:"ocr_text,omitempty"`
+	WER      float64 `json:"word_error_rate,omitempty"`
+	CER      float64 `json:"character_error_rate,omitempty"`
+	OCRError string  `json:"ocr_error,omitempty"`
 }
 
 type ImageAnalyzer interface {
@@ -232,10 +231,6 @@ func (a *imageAnalyzer) AnalyzeWithOCR(img image.Image, expectedText string) Ana
 		result.OCRError = "OCR processing failed: " + err.Error()
 		return result
 	}
-
-	// Get OCR confidence score
-	// Note: gosseract v2 doesn't have GetMeanConfidence, so we'll set a default
-	result.OCRConfidence = 0.85 // Default confidence when OCR succeeds
 
 	result.OCRText = ocrText
 

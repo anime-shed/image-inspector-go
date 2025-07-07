@@ -55,6 +55,11 @@ func analyzeImage(a analyzer.ImageAnalyzer, f storage.ImageFetcher) gin.HandlerF
 			return
 		}
 
+		// Check for IsOCR in query parameter (takes precedence over JSON body)
+		if isOCRQuery := c.Query("IsOCR"); isOCRQuery != "" {
+			req.IsOCR = isOCRQuery == "true"
+		}
+
 		img, err := f.FetchImage(ctx, req.URL)
 		if err != nil {
 			respondError(c, http.StatusInternalServerError, "failed to fetch image", err)
