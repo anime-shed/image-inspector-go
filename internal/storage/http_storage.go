@@ -8,8 +8,6 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 )
 
@@ -22,18 +20,11 @@ type HTTPImageFetcher struct {
 }
 
 func NewHTTPImageFetcher() ImageFetcher {
-	// Configure TLS settings based on environment
-	tlsConfig := &tls.Config{}
-
-	// Check if TLS verification should be skipped (for development/testing)
-	if skipTLS, _ := strconv.ParseBool(os.Getenv("SKIP_TLS_VERIFY")); skipTLS {
-		tlsConfig.InsecureSkipVerify = true
-	}
-
-	// Create custom transport with TLS configuration
+	// Create HTTP client with TLS verification completely disabled
 	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-		// Add other transport settings for better performance and reliability
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,

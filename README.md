@@ -76,8 +76,6 @@ sudo apt-get install tesseract-ocr libtesseract-dev
    ```sh
    export HOST=0.0.0.0
    export PORT=8080
-   # Optional: Skip TLS verification for development/testing
-   export SKIP_TLS_VERIFY=true
    ```
 
 2. Run the application:
@@ -94,7 +92,6 @@ The application can be configured using environment variables. The following var
 - `HOST`: The host address on which the server will listen (default: `0.0.0.0`).
 - `PORT`: The port on which the server will listen (default: `8080`).
 - `GIN_MODE`: The mode in which Gin should run (e.g., `release` for production).
-- `SKIP_TLS_VERIFY`: Set to `true` to skip TLS certificate verification for HTTPS image URLs (useful for development/testing with self-signed certificates).
 
 ## API Endpoints
 
@@ -125,29 +122,6 @@ curl -X POST http://localhost:8080/analyze/ocr \
 ```
 
 ## Troubleshooting
-
-### TLS Certificate Issues
-
-If you encounter TLS certificate verification errors when fetching images from HTTPS URLs:
-
-```json
-{
-    "error": "Internal Server Error",
-    "message": "failed to fetch image: x509: certificate signed by unknown authority"
-}
-```
-
-**Solution:** Set the `SKIP_TLS_VERIFY` environment variable to `true`:
-
-```sh
-# Windows
-set SKIP_TLS_VERIFY=true
-
-# Linux/macOS
-export SKIP_TLS_VERIFY=true
-```
-
-**Note:** Only use this for development/testing. In production, ensure proper certificate management.
 
 ### OCR Not Working
 
