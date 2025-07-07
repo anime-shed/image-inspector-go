@@ -95,13 +95,10 @@ The application can be configured using environment variables. The following var
 
 ## API Endpoints
 
-- `POST /analyze`: Analyze an image with additional options:
+- `POST /analyze`: Analyze an image with optional OCR functionality:
    - `url`: The URL of the image to be analyzed.
-   - `is_ocr`: (optional) Boolean flag to enable OCR-specific thresholds.
-
-- `POST /analyze/ocr`: Analyze an image with OCR and calculate error metrics:
-   - `url`: The URL of the image to be analyzed.
-   - `expected_text`: (optional) The expected text for error rate calculation.
+   - `is_ocr`: (optional) Boolean flag to enable OCR processing.
+   - `expected_text`: (optional) The expected text for error rate calculation when `is_ocr` is true.
 
 ## Usage Examples
 
@@ -116,9 +113,9 @@ curl -X POST http://localhost:8080/analyze \
 ### OCR Analysis with Error Metrics
 
 ```bash
-curl -X POST http://localhost:8080/analyze/ocr \
+curl -X POST http://localhost:8080/analyze \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/text-image.jpg", "expected_text": "This is the expected text in the image."}'
+  -d '{"url": "https://example.com/text-image.jpg", "is_ocr": true, "expected_text": "This is the expected text in the image."}'
 ```
 
 ## Troubleshooting

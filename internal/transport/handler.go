@@ -40,7 +40,6 @@ func NewHandler(analyzer analyzer.ImageAnalyzer, fetcher storage.ImageFetcher) h
 	// Configure routes
 	r.GET("/health", healthCheck)
 	r.POST("/analyze", analyzeImage(analyzer, fetcher))
-	r.POST("/analyze/ocr", analyzeImageWithOCR(analyzer, fetcher))
 
 	return r
 }
@@ -70,30 +69,6 @@ func analyzeImage(a analyzer.ImageAnalyzer, f storage.ImageFetcher) gin.HandlerF
 			// Use regular analysis when isOCR is false
 			result = a.Analyze(img, false)
 		}
-		c.JSON(http.StatusOK, result)
-	}
-}
-
-// analyzeImageWithOCR handles OCR analysis with error metrics calculation
-func analyzeImageWithOCR(a analyzer.ImageAnalyzer, f storage.ImageFetcher) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), requestTimeout)
-		defer cancel()
-
-		var req AnalysisRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			respondError(c, http.StatusBadRequest, "invalid request format", err)
-			return
-		}
-
-		img, err := f.FetchImage(ctx, req.URL)
-		if err != nil {
-			respondError(c, http.StatusInternalServerError, "failed to fetch image", err)
-			return
-		}
-
-		// Use the OCR-specific analyzer method
-		result := a.AnalyzeWithOCR(img, req.ExpectedText)
 		c.JSON(http.StatusOK, result)
 	}
 }
