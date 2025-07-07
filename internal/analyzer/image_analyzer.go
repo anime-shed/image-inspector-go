@@ -1,9 +1,17 @@
 package analyzer
 
 import (
+	"bytes"
 	"image"
 	"image/draw"
+	"image/jpeg"
+	"image/png"
 	"math"
+	"strings"
+
+	"github.com/arbovm/levenshtein"
+	"github.com/codycollier/wer"
+	"github.com/otiai10/gosseract/v2"
 )
 
 type AnalysisResult struct {
@@ -15,16 +23,37 @@ type AnalysisResult struct {
 	AvgLuminance   float64    `json:"average_luminance"`
 	AvgSaturation  float64    `json:"average_saturation"`
 	ChannelBalance [3]float64 `json:"channel_balance"`
+	// OCR related fields
+	OCRText        string     `json:"ocr_text,omitempty"`
+	WER            float64    `json:"word_error_rate,omitempty"`
+	CER            float64    `json:"character_error_rate,omitempty"`
+	OCRConfidence  float64    `json:"ocr_confidence,omitempty"`
+	OCRError       string     `json:"ocr_error,omitempty"`
 }
 
 type ImageAnalyzer interface {
 	Analyze(img image.Image, isOCR bool) AnalysisResult
+	AnalyzeWithOCR(img image.Image, expectedText string) AnalysisResult
+	Close() error
 }
 
-type imageAnalyzer struct{}
+type imageAnalyzer struct{
+	tesseractClient *gosseract.Client
+}
 
 func NewImageAnalyzer() ImageAnalyzer {
-	return &imageAnalyzer{}
+	client := gosseract.NewClient()
+	return &imageAnalyzer{
+		tesseractClient: client,
+	}
+}
+
+// Close releases resources used by the analyzer
+func (a *imageAnalyzer) Close() error {
+	if a.tesseractClient != nil {
+		return a.tesseractClient.Close()
+	}
+	return nil
 }
 
 func (a *imageAnalyzer) Analyze(img image.Image, isOCR bool) AnalysisResult {
@@ -176,4 +205,63 @@ func (a *imageAnalyzer) hasWhiteBalanceIssue(avgR, avgG, avgB float64) bool {
 	return math.Abs(avgR-avg) > maxDeviation ||
 		math.Abs(avgG-avg) > maxDeviation ||
 		math.Abs(avgB-avg) > maxDeviation
+}
+
+// AnalyzeWithOCR performs image analysis and OCR processing with error metrics
+func (a *imageAnalyzer) AnalyzeWithOCR(img image.Image, expectedText string) AnalysisResult {
+	// First perform standard image analysis
+	result := a.Analyze(img, true)
+	
+	// Convert image to bytes for OCR processing
+	buf := new(bytes.Buffer)
+	err := jpeg.Encode(buf, img, nil)
+	if err != nil {
+		// Try PNG if JPEG encoding fails
+		buf.Reset()
+		err = png.Encode(buf, img)
+		if err != nil {
+			result.OCRError = "Failed to encode image: " + err.Error()
+			return result
+		}
+	}
+	
+	// Perform OCR
+	// Note: We don't close the client here as it's reused across requests
+	// The client will be closed when the application shuts down
+	a.tesseractClient.SetImageFromBytes(buf.Bytes())
+	ocrText, err := a.tesseractClient.Text()
+	if err != nil {
+		result.OCRError = "OCR processing failed: " + err.Error()
+		return result
+	}
+	
+	// Try to get confidence if available
+	confidence, _ := a.tesseractClient.GetConfidence()
+	result.OCRConfidence = confidence
+	
+	// Store OCR text in result
+	result.OCRText = ocrText
+	
+	// Calculate metrics if expected text is provided
+	if expectedText != "" {
+		// Calculate WER
+		// Preprocess text for WER calculation
+		expectedLower := strings.ToLower(expectedText)
+		ocrLower := strings.ToLower(ocrText)
+		expectedTokens := strings.Fields(expectedLower)
+		ocrTokens := strings.Fields(ocrLower)
+		
+		werValue, _ := wer.WER(expectedTokens, ocrTokens)
+		result.WER = werValue
+		
+		// Calculate CER using Levenshtein distance
+		runesRef := []rune(expectedLower)
+		runesOcr := []rune(ocrLower)
+		if len(runesRef) > 0 {
+			cerValue := float64(levenshtein.Distance(string(runesRef), string(runesOcr))) / float64(len(runesRef))
+			result.CER = cerValue
+		}
+	}
+	
+	return result
 }

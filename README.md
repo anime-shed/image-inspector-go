@@ -1,6 +1,6 @@
 # Go Image Analyzer
 
-Go Image Analyzer is a web server application written in Go that fetches images from specified URLs, analyzes them for properties such as overexposure, oversaturation, incorrect white balance, and blurriness, and provides the results through an HTTP API.
+Go Image Analyzer is a web server application written in Go that fetches images from specified URLs, analyzes them for properties such as overexposure, oversaturation, incorrect white balance, and blurriness, and provides the results through an HTTP API. It also includes OCR (Optical Character Recognition) capabilities with error rate metrics calculation.
 
 ## Features
 
@@ -14,10 +14,16 @@ Go Image Analyzer is a web server application written in Go that fetches images 
   - Average luminance
   - Average saturation
   - Channel balance (red, green, blue)
+- OCR capabilities:
+  - Text extraction from images
+  - Word Error Rate (WER) calculation
+  - Character Error Rate (CER) calculation
+  - OCR confidence score
 
 ## Prerequisites
 
 - [Go](https://golang.org/doc/install) 1.16 or higher
+- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) 4.0 or higher (required for OCR functionality)
 - [Docker](https://docs.docker.com/get-docker/) (optional, for containerization)
 
 ## Installation
@@ -56,9 +62,50 @@ The application can be configured using environment variables. The following var
 
 ## API Endpoints
 
-- `POST /inspect`: Analyze an image with additional options:
+- `POST /analyze`: Analyze an image with additional options:
    - `url`: The URL of the image to be analyzed.
    - `is_ocr`: (optional) Boolean flag to enable OCR-specific thresholds.
+
+- `POST /analyze/ocr`: Analyze an image with OCR and calculate error metrics:
+   - `url`: The URL of the image to be analyzed.
+   - `expected_text`: (optional) The expected text for error rate calculation.
+
+## Usage Examples
+
+### Basic Image Analysis
+
+```bash
+curl -X POST http://localhost:8080/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/image.jpg", "is_ocr": false}'
+```
+
+### OCR Analysis with Error Metrics
+
+```bash
+curl -X POST http://localhost:8080/analyze/ocr \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/text-image.jpg", "expected_text": "This is the expected text in the image."}'
+```
+
+### Sample Response (OCR Analysis)
+
+```json
+{
+  "overexposed": false,
+  "oversaturated": false,
+  "incorrect_white_balance": false,
+  "blurry": false,
+  "laplacian_variance": 245.32,
+  "average_luminance": 0.68,
+  "average_saturation": 0.42,
+  "channel_balance": [125.6, 130.2, 128.7],
+  "ocr_text": "This is the detected text in the image.",
+  "word_error_rate": 0.25,
+  "character_error_rate": 0.15,
+  "ocr_confidence": 92.5
+}
+```
 
 ## Contributing
 

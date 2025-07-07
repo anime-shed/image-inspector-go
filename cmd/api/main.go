@@ -31,6 +31,12 @@ func main() {
 	// Initialize dependencies
 	imageFetcher := storage.NewHTTPImageFetcher()
 	imageAnalyzer := analyzer.NewImageAnalyzer()
+	// Ensure analyzer resources are properly released on shutdown
+	defer func() {
+		if err := imageAnalyzer.Close(); err != nil {
+			log.Printf("Error closing image analyzer: %v", err)
+		}
+	}()
 
 	// Create HTTP handler with dependencies
 	router := transport.NewHandler(imageAnalyzer, imageFetcher)

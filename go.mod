@@ -4,7 +4,10 @@ go 1.23.5
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.5.0
+	github.com/arbovm/levenshtein v0.0.0-20160628152529-48b985bfebb9
+	github.com/codycollier/wer v0.0.0-20201114202403-55e3667558b3
 	github.com/gin-gonic/gin v1.10.0
+	github.com/otiai10/gosseract/v2 v2.4.1
 )
 
 require (
