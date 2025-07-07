@@ -62,7 +62,14 @@ func analyzeImage(a analyzer.ImageAnalyzer, f storage.ImageFetcher) gin.HandlerF
 			return
 		}
 
-		result := a.Analyze(img, req.IsOCR)
+		var result analyzer.AnalysisResult
+		if req.IsOCR {
+			// Use OCR analysis when isOCR is true
+			result = a.AnalyzeWithOCR(img, req.ExpectedText)
+		} else {
+			// Use regular analysis when isOCR is false
+			result = a.Analyze(img, false)
+		}
 		c.JSON(http.StatusOK, result)
 	}
 }

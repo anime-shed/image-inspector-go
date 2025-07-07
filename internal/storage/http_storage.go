@@ -2,11 +2,14 @@ package storage
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 )
 
@@ -19,10 +22,27 @@ type HTTPImageFetcher struct {
 }
 
 func NewHTTPImageFetcher() ImageFetcher {
+	// Configure TLS settings based on environment
+	tlsConfig := &tls.Config{}
+
+	// Check if TLS verification should be skipped (for development/testing)
+	if skipTLS, _ := strconv.ParseBool(os.Getenv("SKIP_TLS_VERIFY")); skipTLS {
+		tlsConfig.InsecureSkipVerify = true
+	}
+
+	// Create custom transport with TLS configuration
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+		// Add other transport settings for better performance and reliability
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	}
+
 	return &HTTPImageFetcher{
 		client: &http.Client{
-			// Add timeouts and other transport settings as needed
-			Timeout: 30 * time.Second,
+			Transport: transport,
+			Timeout:   30 * time.Second,
 		},
 	}
 }
@@ -35,15 +55,16 @@ func (h *HTTPImageFetcher) FetchImage(ctx context.Context, imageURL string) (ima
 
 	// Set headers for proper image handling
 	req.Header.Set("Accept", "image/jpeg, image/png, image/webp, */*")
+	req.Header.Set("User-Agent", "Go-Image-Inspector/1.0")
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch image: %w", err)
+		return nil, fmt.Errorf("failed to fetch image from %s: %w", imageURL, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("unexpected status code %d when fetching image from %s", resp.StatusCode, imageURL)
 	}
 
 	img, _, err := image.Decode(resp.Body)

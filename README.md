@@ -23,8 +23,28 @@ Go Image Analyzer is a web server application written in Go that fetches images 
 ## Prerequisites
 
 - [Go](https://golang.org/doc/install) 1.16 or higher
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) 4.0 or higher (required for OCR functionality)
+- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) 4.0 or higher (optional, required only for OCR functionality)
 - [Docker](https://docs.docker.com/get-docker/) (optional, for containerization)
+
+### Installing Tesseract OCR (Optional)
+
+**Windows:**
+```sh
+# Using Chocolatey
+choco install tesseract
+
+# Or download from: https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+**macOS:**
+```sh
+brew install tesseract
+```
+
+**Ubuntu/Debian:**
+```sh
+sudo apt-get install tesseract-ocr libtesseract-dev
+```
 
 ## Installation
 
@@ -35,15 +55,29 @@ Go Image Analyzer is a web server application written in Go that fetches images 
    ```
 
 2. Build the application:
+
+   **Without OCR (basic image analysis only):**
    ```sh
    go build -o image-inspector-go ./cmd/api
+   ```
+
+   **With OCR (requires Tesseract OCR installed):**
+   ```sh
+   # On Windows
+   set CGO_ENABLED=1 && go build -tags ocr -o image-inspector-go.exe ./cmd/api
+
+   # On Linux/macOS
+   CGO_ENABLED=1 go build -tags ocr -o image-inspector-go ./cmd/api
    ```
 
 ## Usage
 
 1. Set the necessary environment variables:
    ```sh
-   export SERVER_ADDRESS=:8080
+   export HOST=0.0.0.0
+   export PORT=8080
+   # Optional: Skip TLS verification for development/testing
+   export SKIP_TLS_VERIFY=true
    ```
 
 2. Run the application:
@@ -57,8 +91,10 @@ Go Image Analyzer is a web server application written in Go that fetches images 
 
 The application can be configured using environment variables. The following variables are available:
 
-- `SERVER_ADDRESS`: The address on which the server will listen (e.g., `:8080`).
+- `HOST`: The host address on which the server will listen (default: `0.0.0.0`).
+- `PORT`: The port on which the server will listen (default: `8080`).
 - `GIN_MODE`: The mode in which Gin should run (e.g., `release` for production).
+- `SKIP_TLS_VERIFY`: Set to `true` to skip TLS certificate verification for HTTPS image URLs (useful for development/testing with self-signed certificates).
 
 ## API Endpoints
 
@@ -87,6 +123,53 @@ curl -X POST http://localhost:8080/analyze/ocr \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/text-image.jpg", "expected_text": "This is the expected text in the image."}'
 ```
+
+## Troubleshooting
+
+### TLS Certificate Issues
+
+If you encounter TLS certificate verification errors when fetching images from HTTPS URLs:
+
+```json
+{
+    "error": "Internal Server Error",
+    "message": "failed to fetch image: x509: certificate signed by unknown authority"
+}
+```
+
+**Solution:** Set the `SKIP_TLS_VERIFY` environment variable to `true`:
+
+```sh
+# Windows
+set SKIP_TLS_VERIFY=true
+
+# Linux/macOS
+export SKIP_TLS_VERIFY=true
+```
+
+**Note:** Only use this for development/testing. In production, ensure proper certificate management.
+
+### OCR Not Working
+
+If OCR endpoints return an error about OCR not being available:
+
+1. **Install Tesseract OCR** (see Prerequisites section)
+2. **Rebuild with OCR support:**
+   ```sh
+   # Windows
+   set CGO_ENABLED=1 && go build -tags ocr -o image-inspector-go.exe ./cmd/api
+
+   # Linux/macOS
+   CGO_ENABLED=1 go build -tags ocr -o image-inspector-go ./cmd/api
+   ```
+
+### Build Issues
+
+If you encounter build errors related to CGO or Tesseract:
+
+1. **Ensure CGO is enabled:** `set CGO_ENABLED=1` (Windows) or `export CGO_ENABLED=1` (Linux/macOS)
+2. **Install development headers:** On Linux, install `libtesseract-dev` package
+3. **Use Docker:** Build using the provided Dockerfile which includes all dependencies
 
 ### Sample Response (OCR Analysis)
 

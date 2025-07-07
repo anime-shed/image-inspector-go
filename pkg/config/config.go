@@ -3,11 +3,13 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 )
 
 type Config struct {
-	Host string
-	Port string
+	Host          string
+	Port          string
+	SkipTLSVerify bool
 }
 
 func (c *Config) ServerAddress() string {
@@ -26,6 +28,13 @@ func LoadFromEnv() (*Config, error) {
 	}
 	if cfg.Port == "" {
 		cfg.Port = "8080"
+	}
+
+	// Parse TLS skip verification setting
+	if skipTLS := os.Getenv("SKIP_TLS_VERIFY"); skipTLS != "" {
+		if parsed, err := strconv.ParseBool(skipTLS); err == nil {
+			cfg.SkipTLSVerify = parsed
+		}
 	}
 
 	return cfg, nil
