@@ -1,13 +1,17 @@
 FROM golang:1.23.5-bullseye AS builder
 
 # Install Tesseract OCR and development libraries
-RUN apt-get update && apt-get install -y \
+# Install Tesseract OCR and development libraries with retries
+RUN for i in $(seq 1 5); do \
+    apt-get update && apt-get install -y \
     tesseract-ocr \
     libtesseract-dev \
     libleptonica-dev \
     pkg-config \
     --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
+    && break || sleep 5; \
+done \
+&& rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY go.mod go.sum ./
