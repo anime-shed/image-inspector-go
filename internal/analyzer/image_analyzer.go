@@ -24,11 +24,11 @@ type AnalysisResult struct {
 	AvgSaturation  float64    `json:"average_saturation"`
 	ChannelBalance [3]float64 `json:"channel_balance"`
 	// OCR related fields
-	OCRText        string     `json:"ocr_text,omitempty"`
-	WER            float64    `json:"word_error_rate,omitempty"`
-	CER            float64    `json:"character_error_rate,omitempty"`
-	OCRConfidence  float64    `json:"ocr_confidence,omitempty"`
-	OCRError       string     `json:"ocr_error,omitempty"`
+	OCRText       string  `json:"ocr_text,omitempty"`
+	WER           float64 `json:"word_error_rate,omitempty"`
+	CER           float64 `json:"character_error_rate,omitempty"`
+	OCRConfidence float64 `json:"ocr_confidence,omitempty"`
+	OCRError      string  `json:"ocr_error,omitempty"`
 }
 
 type ImageAnalyzer interface {
@@ -37,7 +37,7 @@ type ImageAnalyzer interface {
 	Close() error
 }
 
-type imageAnalyzer struct{
+type imageAnalyzer struct {
 	tesseractClient *gosseract.Client
 }
 
@@ -211,7 +211,7 @@ func (a *imageAnalyzer) hasWhiteBalanceIssue(avgR, avgG, avgB float64) bool {
 func (a *imageAnalyzer) AnalyzeWithOCR(img image.Image, expectedText string) AnalysisResult {
 	// First perform standard image analysis
 	result := a.Analyze(img, true)
-	
+
 	// Convert image to bytes for OCR processing
 	buf := new(bytes.Buffer)
 	err := jpeg.Encode(buf, img, nil)
@@ -224,7 +224,7 @@ func (a *imageAnalyzer) AnalyzeWithOCR(img image.Image, expectedText string) Ana
 			return result
 		}
 	}
-	
+
 	// Perform OCR
 	// Note: We don't close the client here as it's reused across requests
 	// The client will be closed when the application shuts down
@@ -234,14 +234,15 @@ func (a *imageAnalyzer) AnalyzeWithOCR(img image.Image, expectedText string) Ana
 		result.OCRError = "OCR processing failed: " + err.Error()
 		return result
 	}
-	
+
 	// Try to get confidence if available
-	confidence, _ := a.tesseractClient.GetConfidence()
-	result.OCRConfidence = confidence
-	
+	// Try to get mean confidence if available
+	meanConfidence, _ := a.tesseractClient.MeanConfidence()
+	result.OCRConfidence = float64(meanConfidence) // MeanConfidence returns int, convert to float64
+
 	// Store OCR text in result
 	result.OCRText = ocrText
-	
+
 	// Calculate metrics if expected text is provided
 	if expectedText != "" {
 		// Calculate WER
@@ -250,10 +251,10 @@ func (a *imageAnalyzer) AnalyzeWithOCR(img image.Image, expectedText string) Ana
 		ocrLower := strings.ToLower(ocrText)
 		expectedTokens := strings.Fields(expectedLower)
 		ocrTokens := strings.Fields(ocrLower)
-		
+
 		werValue, _ := wer.WER(expectedTokens, ocrTokens)
 		result.WER = werValue
-		
+
 		// Calculate CER using Levenshtein distance
 		runesRef := []rune(expectedLower)
 		runesOcr := []rune(ocrLower)
@@ -262,6 +263,6 @@ func (a *imageAnalyzer) AnalyzeWithOCR(img image.Image, expectedText string) Ana
 			result.CER = cerValue
 		}
 	}
-	
+
 	return result
 }
