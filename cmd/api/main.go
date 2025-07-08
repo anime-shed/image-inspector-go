@@ -30,7 +30,10 @@ func main() {
 
 	// Initialize dependencies
 	imageFetcher := storage.NewHTTPImageFetcher()
-	imageAnalyzer := analyzer.NewImageAnalyzer()
+	imageAnalyzer, err := analyzer.NewImageAnalyzer("eng", 3) // Using integer value for PageSegModeAuto
+	if err != nil {
+		log.Fatalf("Failed to create image analyzer: %v", err)
+	}
 	// Ensure analyzer resources are properly released on shutdown
 	defer func() {
 		if err := imageAnalyzer.Close(); err != nil {

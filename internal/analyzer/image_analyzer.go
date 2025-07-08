@@ -40,11 +40,20 @@ type imageAnalyzer struct {
 	tesseractClient *gosseract.Client
 }
 
-func NewImageAnalyzer() ImageAnalyzer {
+func NewImageAnalyzer(lang string, psm gosseract.PageSegMode) (ImageAnalyzer, error) {
 	client := gosseract.NewClient()
+	// Set language
+	err := client.SetLanguage(lang)
+	if err != nil {
+		client.Close() // Clean up if setting language fails
+		return nil, err
+	}
+	// Set Page Segmentation Mode
+	client.SetPageSegMode(psm)
+
 	return &imageAnalyzer{
 		tesseractClient: client,
-	}
+	}, nil
 }
 
 // Close releases resources used by the analyzer
