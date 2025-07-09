@@ -35,7 +35,7 @@ type AnalysisResult struct {
 	WER      float64 `json:"word_error_rate,omitempty"`
 	CER      float64 `json:"character_error_rate,omitempty"`
 	OCRError string  `json:"ocr_error,omitempty"`
-	
+
 	// Quality validation errors
 	Errors []string `json:"errors,omitempty"`
 }
@@ -45,7 +45,7 @@ type ImageAnalyzer interface {
 	AnalyzeWithOCR(img image.Image, expectedText string) AnalysisResult
 }
 
-type imageAnalyzer struct {}
+type imageAnalyzer struct{}
 
 func NewImageAnalyzer() (ImageAnalyzer, error) {
 	return &imageAnalyzer{}, nil
@@ -217,17 +217,6 @@ func (a *imageAnalyzer) hasWhiteBalanceIssue(avgR, avgG, avgB float64) bool {
 func (a *imageAnalyzer) AnalyzeWithOCR(img image.Image, expectedText string) AnalysisResult {
 	// Perform standard image analysis with OCR quality checks
 	result := a.Analyze(img, true)
-
-	// Set OCR error to indicate OCR is not available
-	result.OCRError = "OCR processing is not available in this build"
-
-	// Calculate placeholder metrics if expected text is provided
-	if expectedText != "" {
-		// Set placeholder values
-		result.WER = -1 // Indicates not calculated
-		result.CER = -1 // Indicates not calculated
-	}
-
 	// Validate quality check conditions and populate errors
 	a.validateQualityConditions(&result)
 
@@ -426,8 +415,6 @@ func (a *imageAnalyzer) floodFill(edges, visited [][]bool, startX, startY, width
 	}
 }
 
-
-
 // detectQRCode detects QR codes in the image
 func (a *imageAnalyzer) detectQRCode(img image.Image) bool {
 	// Simple QR code detection using pattern matching
@@ -604,10 +591,10 @@ func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
 	// 10. Channel Balance
 	// Check if the difference between any two channels > 50
 	channels := result.ChannelBalance
-	if math.Abs(channels[0]-channels[1]) > 50 || 
-	   math.Abs(channels[0]-channels[2]) > 50 || 
-	   math.Abs(channels[1]-channels[2]) > 50 {
-		errors = append(errors, fmt.Sprintf("Channel imbalance detected: R=%.2f, G=%.2f, B=%.2f (max difference > 50)", 
+	if math.Abs(channels[0]-channels[1]) > 50 ||
+		math.Abs(channels[0]-channels[2]) > 50 ||
+		math.Abs(channels[1]-channels[2]) > 50 {
+		errors = append(errors, fmt.Sprintf("Channel imbalance detected: R=%.2f, G=%.2f, B=%.2f (max difference > 50)",
 			channels[0], channels[1], channels[2]))
 	}
 
