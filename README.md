@@ -1,6 +1,6 @@
 # Go Image Analyzer
 
-Go Image Analyzer is a web server application written in Go that fetches images from specified URLs, analyzes them for properties such as overexposure, oversaturation, incorrect white balance, and blurriness, and provides the results through an HTTP API. It also includes OCR (Optical Character Recognition) capabilities with error rate metrics calculation.
+Go Image Analyzer is a web server application written in Go that fetches images from specified URLs, analyzes them for properties such as overexposure, oversaturation, incorrect white balance, and blurriness, and provides the results through an HTTP API. It also includes OCR quality validation to assess if images are suitable for OCR processing, though actual text extraction is not performed.
 
 ## Features
 
@@ -14,37 +14,33 @@ Go Image Analyzer is a web server application written in Go that fetches images 
   - Average luminance
   - Average saturation
   - Channel balance (red, green, blue)
-- OCR capabilities:
-  - Text extraction from images
-  - Word Error Rate (WER) calculation
-  - Character Error Rate (CER) calculation
-  - OCR confidence score
+- OCR quality validation:
+  - Image quality assessment for OCR readiness
+  - Word Error Rate (WER) calculation (when OCR is available)
+  - Character Error Rate (CER) calculation (when OCR is available)
+  - Detailed error reporting for image quality issues during OCR processing
+
+## OCR Quality Validation
+
+The OCR API now includes comprehensive quality validation that checks for the following conditions:
+
+- **Resolution**: Minimum width of 800px, minimum height of 1000px, and minimum total area of 800,000 pixels
+- **Blurriness**: Laplacian variance must be above 500.0 for acceptable sharpness
+- **Brightness**: Must be between 80 and 220 (not too dark or too bright)
+- **Overexposure/Oversaturation**: Checks for excessive light or color saturation
+- **White Balance**: Ensures proper color balance across channels
+- **Skew**: Document skew angle must be less than 5 degrees
+- **Document Edges**: Verifies document edges are clearly visible
+- **Contour Count**: Ensures sufficient contours for proper text recognition
+- **Luminance and Saturation**: Validates average values are within acceptable ranges
+- **Channel Balance**: Ensures RGB channels are properly balanced
+
+If any of these conditions fail, the API response will include an "Errors" field with specific error messages.
 
 ## Prerequisites
 
 - [Go](https://golang.org/doc/install) 1.16 or higher
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) 4.0 or higher (optional, required only for OCR functionality)
 - [Docker](https://docs.docker.com/get-docker/) (optional, for containerization)
-
-### Installing Tesseract OCR (Optional)
-
-**Windows:**
-```sh
-# Using Chocolatey
-choco install tesseract
-
-# Or download from: https://github.com/UB-Mannheim/tesseract/wiki
-```
-
-**macOS:**
-```sh
-brew install tesseract
-```
-
-**Ubuntu/Debian:**
-```sh
-sudo apt-get install tesseract-ocr libtesseract-dev
-```
 
 ## Installation
 
@@ -53,22 +49,11 @@ sudo apt-get install tesseract-ocr libtesseract-dev
    git clone https://github.com/anime-shed/image-inspector-go.git
    cd image-inspector-go
    ```
-
 2. Build the application:
-
-   **Without OCR (basic image analysis only):**
    ```sh
    go build -o image-inspector-go ./cmd/api
    ```
-
-   **With OCR (requires Tesseract OCR installed):**
-   ```sh
-   # On Windows
-   set CGO_ENABLED=1 && go build -tags ocr -o image-inspector-go.exe ./cmd/api
-
-   # On Linux/macOS
-   CGO_ENABLED=1 go build -tags ocr -o image-inspector-go ./cmd/api
-   ```
+```
 
 ## Usage
 
@@ -95,10 +80,10 @@ The application can be configured using environment variables. The following var
 
 ## API Endpoints
 
-- `POST /analyze`: Analyze an image with optional OCR functionality:
+- `POST /analyze`: Analyze an image with optional OCR quality validation:
    - `url`: The URL of the image to be analyzed.
-   - `is_ocr`: (optional) Boolean flag to enable OCR processing.
-   - `expected_text`: (optional) The expected text for error rate calculation when `is_ocr` is true.
+   - `is_ocr`: (optional) Boolean flag to enable OCR quality validation.
+   - `expected_text`: (optional) This parameter is retained for API compatibility but is not used in the current version.
 
 ## Usage Examples
 
@@ -110,39 +95,30 @@ curl -X POST http://localhost:8080/analyze \
   -d '{"url": "https://example.com/image.jpg", "is_ocr": false}'
 ```
 
-### OCR Analysis with Error Metrics
+### OCR Quality Analysis
 
 ```bash
 curl -X POST http://localhost:8080/analyze \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/text-image.jpg", "is_ocr": true, "expected_text": "This is the expected text in the image."}'
+  -d '{"url": "https://example.com/text-image.jpg", "is_ocr": true}'
 ```
 
 ## Troubleshooting
 
-### OCR Not Working
+### OCR Functionality
 
-If OCR endpoints return an error about OCR not being available:
+The OCR text extraction functionality has been removed from this version. The application will still perform image quality validation to determine if an image is suitable for OCR processing, but actual text extraction is not available.
 
-1. **Install Tesseract OCR** (see Prerequisites section)
-2. **Rebuild with OCR support:**
-   ```sh
-   # Windows
-   set CGO_ENABLED=1 && go build -tags ocr -o image-inspector-go.exe ./cmd/api
-
-   # Linux/macOS
-   CGO_ENABLED=1 go build -tags ocr -o image-inspector-go ./cmd/api
-   ```
+If you need OCR text extraction functionality, please use a dedicated OCR service or library.
 
 ### Build Issues
 
-If you encounter build errors related to CGO or Tesseract:
+If you encounter build errors:
 
-1. **Ensure CGO is enabled:** `set CGO_ENABLED=1` (Windows) or `export CGO_ENABLED=1` (Linux/macOS)
-2. **Install development headers:** On Linux, install `libtesseract-dev` package
-3. **Use Docker:** Build using the provided Dockerfile which includes all dependencies
+1. **Check Go version:** Ensure you have Go 1.16 or higher installed
+2. **Use Docker:** Build using the provided Dockerfile which includes all dependencies
 
-### Sample Response (OCR Analysis)
+### Sample Response (OCR Quality Analysis)
 
 ```json
 {
@@ -154,10 +130,13 @@ If you encounter build errors related to CGO or Tesseract:
   "average_luminance": 0.68,
   "average_saturation": 0.42,
   "channel_balance": [125.6, 130.2, 128.7],
-  "ocr_text": "This is the detected text in the image.",
-  "word_error_rate": 0.25,
-  "character_error_rate": 0.15,
-  "ocr_confidence": 92.5
+  "word_error_rate": -1,
+  "character_error_rate": -1,
+  "ocr_error": "OCR processing is not available in this build",
+  "errors": [
+    "Image resolution is too low (600x800). Minimum requirements: 800x1000 or 800,000 total pixels",
+    "Image is too blurry. Laplacian variance: 245.32 (minimum: 500.0)"
+  ]
 }
 ```
 

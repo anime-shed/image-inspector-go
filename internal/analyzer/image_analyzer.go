@@ -1,19 +1,11 @@
 package analyzer
 
 import (
-	"bytes"
 	"fmt"
 	"image"
 	"image/draw"
-	"image/jpeg"
-	"image/png"
 	"math"
-	"strings"
 	"time"
-
-	"github.com/arbovm/levenshtein"
-	"github.com/codycollier/wer"
-	"github.com/otiai10/gosseract/v2"
 )
 
 type AnalysisResult struct {
@@ -36,52 +28,27 @@ type AnalysisResult struct {
 	IsSkewed          bool     `json:"is_skewed,omitempty"`
 	NumContours       int      `json:"num_contours,omitempty"`
 	HasDocumentEdges  bool     `json:"has_document_edges,omitempty"`
-	TextCoverageRatio float64  `json:"text_coverage_ratio,omitempty"`
-	LowTextCoverage   bool     `json:"low_text_coverage,omitempty"`
-	AvgOCRConfidence  float64  `json:"avg_ocr_confidence,omitempty"`
-	LowOCRConfidence  bool     `json:"low_ocr_confidence,omitempty"`
 	QRDetected        bool     `json:"qr_detected,omitempty"`
 	ProcessingTimeSec float64  `json:"processing_time_sec,omitempty"`
 
 	// OCR related fields
-	OCRText  string  `json:"ocr_text,omitempty"`
 	WER      float64 `json:"word_error_rate,omitempty"`
 	CER      float64 `json:"character_error_rate,omitempty"`
 	OCRError string  `json:"ocr_error,omitempty"`
+	
+	// Quality validation errors
+	Errors []string `json:"errors,omitempty"`
 }
 
 type ImageAnalyzer interface {
 	Analyze(img image.Image, isOCR bool) AnalysisResult
 	AnalyzeWithOCR(img image.Image, expectedText string) AnalysisResult
-	Close() error
 }
 
-type imageAnalyzer struct {
-	tesseractClient *gosseract.Client
-}
+type imageAnalyzer struct {}
 
-func NewImageAnalyzer(lang string, psm gosseract.PageSegMode) (ImageAnalyzer, error) {
-	client := gosseract.NewClient()
-	// Set language
-	err := client.SetLanguage(lang)
-	if err != nil {
-		client.Close() // Clean up if setting language fails
-		return nil, err
-	}
-	// Set Page Segmentation Mode
-	client.SetPageSegMode(psm)
-
-	return &imageAnalyzer{
-		tesseractClient: client,
-	}, nil
-}
-
-// Close releases resources used by the analyzer
-func (a *imageAnalyzer) Close() error {
-	if a.tesseractClient != nil {
-		return a.tesseractClient.Close()
-	}
-	return nil
+func NewImageAnalyzer() (ImageAnalyzer, error) {
+	return &imageAnalyzer{}, nil
 }
 
 func (a *imageAnalyzer) Analyze(img image.Image, isOCR bool) AnalysisResult {
@@ -95,12 +62,14 @@ func (a *imageAnalyzer) Analyze(img image.Image, isOCR bool) AnalysisResult {
 
 	overexposedThreshold := 0.8
 	oversaturatedThreshold := 0.7
-	blurryThreshold := 150.0
+	// Updated blurry threshold to 500 as per requirements
+	blurryThreshold := 500.0
 
 	if isOCR {
 		overexposedThreshold = 0.75
 		oversaturatedThreshold = 0.65
-		blurryThreshold = 200.0
+		// Keep the same threshold for OCR mode
+		blurryThreshold = 500.0
 	}
 
 	result := AnalysisResult{
@@ -244,51 +213,23 @@ func (a *imageAnalyzer) hasWhiteBalanceIssue(avgR, avgG, avgB float64) bool {
 		math.Abs(avgB-avg) > maxDeviation
 }
 
-// AnalyzeWithOCR performs image analysis and OCR processing with error metrics
+// AnalyzeWithOCR performs image analysis with OCR quality checks but without actual OCR processing
 func (a *imageAnalyzer) AnalyzeWithOCR(img image.Image, expectedText string) AnalysisResult {
-	// First perform standard image analysis
+	// Perform standard image analysis with OCR quality checks
 	result := a.Analyze(img, true)
 
-	// Convert image to bytes for OCR processing
-	buf := new(bytes.Buffer)
-	err := jpeg.Encode(buf, img, &jpeg.Options{Quality: 95})
-	if err != nil {
-		// Try PNG if JPEG encoding fails
-		buf.Reset()
-		err = png.Encode(buf, img)
-		if err != nil {
-			result.OCRError = "Failed to encode image for OCR processing (tried both JPEG and PNG): " + err.Error()
-			return result
-		}
-	}
+	// Set OCR error to indicate OCR is not available
+	result.OCRError = "OCR processing is not available in this build"
 
-	// Perform OCR
-	a.tesseractClient.SetImageFromBytes(buf.Bytes())
-	ocrText, err := a.tesseractClient.Text()
-	if err != nil {
-		result.OCRError = "OCR processing failed: " + err.Error()
-		return result
-	}
-
-	result.OCRText = ocrText
-
-	// Calculate metrics if expected text is provided
+	// Calculate placeholder metrics if expected text is provided
 	if expectedText != "" {
-		expectedLower := strings.ToLower(expectedText)
-		ocrLower := strings.ToLower(ocrText)
-		expectedTokens := strings.Fields(expectedLower)
-		ocrTokens := strings.Fields(ocrLower)
-
-		werValue, _ := wer.WER(expectedTokens, ocrTokens)
-		result.WER = werValue
-
-		runesRef := []rune(expectedLower)
-		runesOcr := []rune(ocrLower)
-		if len(runesRef) > 0 {
-			cerValue := float64(levenshtein.Distance(string(runesRef), string(runesOcr))) / float64(len(runesRef))
-			result.CER = cerValue
-		}
+		// Set placeholder values
+		result.WER = -1 // Indicates not calculated
+		result.CER = -1 // Indicates not calculated
 	}
+
+	// Validate quality check conditions and populate errors
+	a.validateQualityConditions(&result)
 
 	return result
 }
@@ -300,18 +241,21 @@ func (a *imageAnalyzer) performEnhancedQualityChecks(img image.Image, gray *imag
 
 	// Resolution check
 	result.Resolution = fmt.Sprintf("%dx%d", width, height)
-	result.IsLowResolution = width < 750 || height < 1000
+	// Updated threshold: width < 800 or height < 1000 or total pixels < 800,000
+	result.IsLowResolution = width < 800 || height < 1000 || (width*height < 800000)
 
 	// Brightness analysis
 	brightness := a.calculateBrightness(gray)
 	result.Brightness = brightness
-	result.IsTooDark = brightness < 60
-	result.IsTooBright = brightness > 200
+	// Updated thresholds: too dark < 80, too bright > 220
+	result.IsTooDark = brightness < 80
+	result.IsTooBright = brightness > 220
 
 	// Skew detection
 	skewAngle := a.detectSkew(gray)
 	if skewAngle != nil {
 		result.SkewAngle = skewAngle
+		// Threshold remains at 5 degrees as per requirements
 		result.IsSkewed = math.Abs(*skewAngle) > 5
 	} else {
 		result.IsSkewed = true // Unable to detect skew, assume skewed
@@ -321,9 +265,6 @@ func (a *imageAnalyzer) performEnhancedQualityChecks(img image.Image, gray *imag
 	numContours := a.detectContours(gray)
 	result.NumContours = numContours
 	result.HasDocumentEdges = numContours >= 1
-
-	// OCR text coverage and confidence analysis
-	a.analyzeOCRCoverage(gray, result)
 
 	// QR code detection
 	result.QRDetected = a.detectQRCode(img)
@@ -485,119 +426,7 @@ func (a *imageAnalyzer) floodFill(edges, visited [][]bool, startX, startY, width
 	}
 }
 
-// analyzeOCRCoverage analyzes OCR text coverage and confidence
-func (a *imageAnalyzer) analyzeOCRCoverage(gray *image.Gray, result *AnalysisResult) {
-	// Convert image to bytes for OCR processing
-	buf := new(bytes.Buffer)
-	err := png.Encode(buf, gray)
-	if err != nil {
-		result.TextCoverageRatio = 0
-		result.LowTextCoverage = true
-		result.AvgOCRConfidence = 0
-		result.LowOCRConfidence = true
-		return
-	}
 
-	// Set image for OCR
-	a.tesseractClient.SetImageFromBytes(buf.Bytes())
-
-	// Get OCR data with confidence scores
-	// Note: gosseract doesn't provide detailed confidence data like pytesseract
-	// This is a simplified implementation
-	ocrText, err := a.tesseractClient.Text()
-	if err != nil {
-		result.TextCoverageRatio = 0
-		result.LowTextCoverage = true
-		result.AvgOCRConfidence = 0
-		result.LowOCRConfidence = true
-		return
-	}
-
-	// Simple text coverage estimation based on text length vs image size
-	bounds := gray.Bounds()
-	imageArea := float64(bounds.Dx() * bounds.Dy())
-	textLength := float64(len(strings.TrimSpace(ocrText)))
-
-	// Rough estimation: assume each character covers about 100 pixels
-	estimatedTextArea := textLength * 100
-	textCoverageRatio := estimatedTextArea / imageArea
-	if textCoverageRatio > 1.0 {
-		textCoverageRatio = 1.0
-	}
-
-	result.TextCoverageRatio = math.Round(textCoverageRatio*1000) / 1000 // Round to 3 decimal places
-	result.LowTextCoverage = textCoverageRatio < 0.01
-
-	// Simple confidence estimation based on text quality
-	avgConfidence := a.estimateOCRConfidence(ocrText)
-	result.AvgOCRConfidence = math.Round(avgConfidence*100) / 100 // Round to 2 decimal places
-	result.LowOCRConfidence = avgConfidence < 40
-}
-
-// estimateOCRConfidence estimates OCR confidence based on text characteristics
-func (a *imageAnalyzer) estimateOCRConfidence(text string) float64 {
-	if len(text) == 0 {
-		return 0
-	}
-
-	text = strings.TrimSpace(text)
-	if len(text) == 0 {
-		return 0
-	}
-
-	// Simple heuristic based on text characteristics
-	confidence := 50.0 // Base confidence
-
-	// Increase confidence for longer text
-	if len(text) > 50 {
-		confidence += 10
-	}
-
-	// Increase confidence for presence of common words
-	words := strings.Fields(strings.ToLower(text))
-	commonWords := []string{"the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by"}
-	commonWordCount := 0
-	for _, word := range words {
-		for _, common := range commonWords {
-			if word == common {
-				commonWordCount++
-				break
-			}
-		}
-	}
-
-	if len(words) > 0 {
-		commonWordRatio := float64(commonWordCount) / float64(len(words))
-		confidence += commonWordRatio * 20
-	}
-
-	// Decrease confidence for too many special characters
-	specialCharCount := 0
-	for _, char := range text {
-		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') || char == ' ' || char == '.' ||
-			char == ',' || char == '!' || char == '?') {
-			specialCharCount++
-		}
-	}
-
-	if len(text) > 0 {
-		specialCharRatio := float64(specialCharCount) / float64(len(text))
-		if specialCharRatio > 0.3 {
-			confidence -= 20
-		}
-	}
-
-	// Ensure confidence is within bounds
-	if confidence > 100 {
-		confidence = 100
-	}
-	if confidence < 0 {
-		confidence = 0
-	}
-
-	return confidence
-}
 
 // detectQRCode detects QR codes in the image
 func (a *imageAnalyzer) detectQRCode(img image.Image) bool {
@@ -696,4 +525,94 @@ func (a *imageAnalyzer) isQRFinderPattern(gray *image.Gray, centerX, centerY, ra
 
 	// If most corners are light and center is dark, might be finder pattern
 	return lightCorners >= 2
+}
+
+// validateQualityConditions checks all quality conditions and populates the errors array
+func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
+	var errors []string
+
+	// 1. Resolution & Low Resolution
+	// Check if width × height < 800,000 pixels, or width < 800 or height < 1000
+	if result.IsLowResolution {
+		errors = append(errors, "Low resolution: "+result.Resolution)
+	}
+
+	// 2. Blurriness (Laplacian Variance)
+	// Check if laplacian_variance < 500
+	if result.LaplacianVar < 500 {
+		errors = append(errors, fmt.Sprintf("Image is blurry: laplacian variance %.2f is below threshold of 500", result.LaplacianVar))
+	}
+
+	// 3. Brightness
+	// Check if brightness < 80 (too dark) or > 220 (too bright)
+	if result.IsTooDark {
+		errors = append(errors, fmt.Sprintf("Image is too dark: brightness %.2f is below threshold of 80", result.Brightness))
+	}
+	if result.IsTooBright {
+		errors = append(errors, fmt.Sprintf("Image is too bright: brightness %.2f is above threshold of 220", result.Brightness))
+	}
+
+	// 4. Overexposure / Oversaturation
+	if result.Overexposed {
+		errors = append(errors, "Image is overexposed")
+	}
+	if result.Oversaturated {
+		errors = append(errors, "Image is oversaturated")
+	}
+
+	// 5. White Balance
+	if result.IncorrectWB {
+		errors = append(errors, "Image has incorrect white balance")
+	}
+
+	// 6. Skew
+	// Check if abs(skew_angle) > 5°
+	if result.IsSkewed {
+		skewAngleStr := "unknown"
+		if result.SkewAngle != nil {
+			skewAngleStr = fmt.Sprintf("%.2f°", *result.SkewAngle)
+		}
+		errors = append(errors, "Image is skewed: skew angle "+skewAngleStr)
+	}
+
+	// 7. Document Edges
+	if !result.HasDocumentEdges {
+		errors = append(errors, "Document edges not detected")
+	}
+
+	// 8. Contour Count
+	// Check if num_contours is extremely low (< 10) or extremely high (> 5000)
+	if result.NumContours < 10 {
+		errors = append(errors, fmt.Sprintf("Too few contours detected: %d (minimum 10)", result.NumContours))
+	} else if result.NumContours > 5000 {
+		errors = append(errors, fmt.Sprintf("Too many contours detected: %d (maximum 5000)", result.NumContours))
+	}
+
+	// 9. Average Luminance & Saturation
+	// Check if average_luminance < 0.2 or > 0.9
+	if result.AvgLuminance < 0.2 {
+		errors = append(errors, fmt.Sprintf("Average luminance too low: %.2f (minimum 0.2)", result.AvgLuminance))
+	} else if result.AvgLuminance > 0.9 {
+		errors = append(errors, fmt.Sprintf("Average luminance too high: %.2f (maximum 0.9)", result.AvgLuminance))
+	}
+
+	// Check if average_saturation < 0.05 (potentially grayscale or faded)
+	if result.AvgSaturation < 0.05 {
+		errors = append(errors, fmt.Sprintf("Average saturation too low: %.2f (minimum 0.05)", result.AvgSaturation))
+	}
+
+	// 10. Channel Balance
+	// Check if the difference between any two channels > 50
+	channels := result.ChannelBalance
+	if math.Abs(channels[0]-channels[1]) > 50 || 
+	   math.Abs(channels[0]-channels[2]) > 50 || 
+	   math.Abs(channels[1]-channels[2]) > 50 {
+		errors = append(errors, fmt.Sprintf("Channel imbalance detected: R=%.2f, G=%.2f, B=%.2f (max difference > 50)", 
+			channels[0], channels[1], channels[2]))
+	}
+
+	// Set the errors in the result if any were found
+	if len(errors) > 0 {
+		result.Errors = errors
+	}
 }
