@@ -571,8 +571,8 @@ func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
 	// Check if num_contours is extremely low (< 10) or extremely high (> 5000)
 	if result.NumContours < 20 {
 		errors = append(errors, fmt.Sprintf("Too few contours detected: %d (minimum 20)", result.NumContours))
-	} else if result.NumContours > 15000 {
-		errors = append(errors, fmt.Sprintf("Too many contours detected: %d (maximum 15000)", result.NumContours))
+	} else if result.NumContours > 50000 {
+		errors = append(errors, fmt.Sprintf("Too many contours detected: %d (maximum 50000)", result.NumContours))
 	}
 
 	// 9. Average Luminance & Saturation
