@@ -231,21 +231,21 @@ func (a *imageAnalyzer) performEnhancedQualityChecks(img image.Image, gray *imag
 	// Resolution check
 	result.Resolution = fmt.Sprintf("%dx%d", width, height)
 	// Updated threshold: width < 800 or height < 1000 or total pixels < 800,000
-	result.IsLowResolution = width < 800 || height < 1000 || (width*height < 800000)
+	result.IsLowResolution = width < 600 || height < 600 || (width*height < 360000)
 
 	// Brightness analysis
 	brightness := a.calculateBrightness(gray)
 	result.Brightness = brightness
 	// Updated thresholds: too dark < 80, too bright > 220
-	result.IsTooDark = brightness < 80
-	result.IsTooBright = brightness > 220
+	result.IsTooDark = brightness < 100
+	result.IsTooBright = brightness > 240
 
 	// Skew detection
 	skewAngle := a.detectSkew(gray)
 	if skewAngle != nil {
 		result.SkewAngle = skewAngle
 		// Threshold remains at 5 degrees as per requirements
-		result.IsSkewed = math.Abs(*skewAngle) > 5
+		result.IsSkewed = math.Abs(*skewAngle) > 15
 	} else {
 		result.IsSkewed = true // Unable to detect skew, assume skewed
 	}
@@ -526,17 +526,17 @@ func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
 
 	// 2. Blurriness (Laplacian Variance)
 	// Check if laplacian_variance < 500
-	if result.LaplacianVar < 500 {
-		errors = append(errors, fmt.Sprintf("Image is blurry: laplacian variance %.2f is below threshold of 500", result.LaplacianVar))
+	if result.LaplacianVar < 350 {
+		errors = append(errors, fmt.Sprintf("Image is blurry: laplacian variance %.2f is below threshold of 350", result.LaplacianVar))
 	}
 
 	// 3. Brightness
 	// Check if brightness < 80 (too dark) or > 220 (too bright)
 	if result.IsTooDark {
-		errors = append(errors, fmt.Sprintf("Image is too dark: brightness %.2f is below threshold of 80", result.Brightness))
+		errors = append(errors, fmt.Sprintf("Image is too dark: brightness %.2f is below threshold of 100", result.Brightness))
 	}
 	if result.IsTooBright {
-		errors = append(errors, fmt.Sprintf("Image is too bright: brightness %.2f is above threshold of 220", result.Brightness))
+		errors = append(errors, fmt.Sprintf("Image is too bright: brightness %.2f is above threshold of 240", result.Brightness))
 	}
 
 	// 4. Overexposure / Oversaturation
@@ -569,11 +569,11 @@ func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
 
 	// 8. Contour Count
 	// Check if num_contours is extremely low (< 10) or extremely high (> 5000)
-	if result.NumContours < 20 {
-		errors = append(errors, fmt.Sprintf("Too few contours detected: %d (minimum 20)", result.NumContours))
-	} else if result.NumContours > 50000 {
-		errors = append(errors, fmt.Sprintf("Too many contours detected: %d (maximum 50000)", result.NumContours))
-	}
+	// if result.NumContours < 20 {
+	// 	errors = append(errors, fmt.Sprintf("Too few contours detected: %d (minimum 20)", result.NumContours))
+	// } else if result.NumContours > 60000 {
+	// 	errors = append(errors, fmt.Sprintf("Too many contours detected: %d (maximum 50000)", result.NumContours))
+	// }
 
 	// 9. Average Luminance & Saturation
 	// Check if average_luminance < 0.2 or > 0.9
