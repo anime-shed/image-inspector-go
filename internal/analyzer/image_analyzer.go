@@ -237,8 +237,8 @@ func (a *imageAnalyzer) performEnhancedQualityChecks(img image.Image, gray *imag
 	brightness := a.calculateBrightness(gray)
 	result.Brightness = brightness
 	// Updated thresholds: too dark < 80, too bright > 220
-	result.IsTooDark = brightness < 100
-	result.IsTooBright = brightness > 240
+	result.IsTooDark = brightness <= 100
+	result.IsTooBright = brightness >= 240
 
 	// Skew detection
 	skewAngle := a.detectSkew(gray)
@@ -526,7 +526,7 @@ func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
 
 	// 2. Blurriness (Laplacian Variance)
 	// Check if laplacian_variance < 500
-	if result.LaplacianVar < 350 {
+	if result.LaplacianVar <= 350 {
 		errors = append(errors, fmt.Sprintf("Image is blurry: laplacian variance %.2f is below threshold of 350", result.LaplacianVar))
 	}
 
@@ -577,23 +577,23 @@ func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
 
 	// 9. Average Luminance & Saturation
 	// Check if average_luminance < 0.2 or > 0.9
-	if result.AvgLuminance < 0.2 {
+	if result.AvgLuminance <= 0.2 {
 		errors = append(errors, fmt.Sprintf("Average luminance too low: %.2f (minimum 0.2)", result.AvgLuminance))
-	} else if result.AvgLuminance > 0.9 {
+	} else if result.AvgLuminance >= 0.9 {
 		errors = append(errors, fmt.Sprintf("Average luminance too high: %.2f (maximum 0.9)", result.AvgLuminance))
 	}
 
 	// Check if average_saturation < 0.05 (potentially grayscale or faded)
-	if result.AvgSaturation < 0.05 {
+	if result.AvgSaturation <= 0.05 {
 		errors = append(errors, fmt.Sprintf("Average saturation too low: %.2f (minimum 0.05)", result.AvgSaturation))
 	}
 
 	// 10. Channel Balance
 	// Check if the difference between any two channels > 50
 	channels := result.ChannelBalance
-	if math.Abs(channels[0]-channels[1]) > 50 ||
-		math.Abs(channels[0]-channels[2]) > 50 ||
-		math.Abs(channels[1]-channels[2]) > 50 {
+	if math.Abs(channels[0]-channels[1]) >= 50 ||
+		math.Abs(channels[0]-channels[2]) >= 50 ||
+		math.Abs(channels[1]-channels[2]) >= 50 {
 		errors = append(errors, fmt.Sprintf("Channel imbalance detected: R=%.2f, G=%.2f, B=%.2f (max difference > 50)",
 			channels[0], channels[1], channels[2]))
 	}
