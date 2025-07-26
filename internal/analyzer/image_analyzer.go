@@ -521,35 +521,35 @@ func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
 	// 1. Resolution & Low Resolution
 	// Check if width × height < 800,000 pixels, or width < 800 or height < 1000
 	if result.IsLowResolution {
-		errors = append(errors, "Low resolution: "+result.Resolution)
+		errors = append(errors, "Image is too small or unclear. Please take a clearer photo.")
 	}
 
 	// 2. Blurriness (Laplacian Variance)
 	// Check if laplacian_variance < 500
 	if result.LaplacianVar <= 350 {
-		errors = append(errors, fmt.Sprintf("Image is blurry: laplacian variance %.2f is below threshold of 350", result.LaplacianVar))
+		errors = append(errors, "Image is blurry. Please hold the camera steady and try again.")
 	}
 
 	// 3. Brightness
 	// Check if brightness < 80 (too dark) or > 220 (too bright)
 	if result.IsTooDark {
-		errors = append(errors, fmt.Sprintf("Image is too dark: brightness %.2f is below threshold of 100", result.Brightness))
+		errors = append(errors, "Image is too dark. Take the photo in more light.")
 	}
 	if result.IsTooBright {
-		errors = append(errors, fmt.Sprintf("Image is too bright: brightness %.2f is above threshold of 240", result.Brightness))
+		errors = append(errors, "Image is too bright. Avoid strong sunlight or flash.")
 	}
 
 	// 4. Overexposure / Oversaturation
 	if result.Overexposed {
-		errors = append(errors, "Image is overexposed")
+		errors = append(errors, "Image has too much light. Move to a less bright area.")
 	}
 	if result.Oversaturated {
-		errors = append(errors, "Image is oversaturated")
+		errors = append(errors, "Colors are too strong. Use normal light while clicking.")
 	}
 
 	// 5. White Balance
 	if result.IncorrectWB {
-		errors = append(errors, "Image has incorrect white balance")
+		errors = append(errors, "Colors in the photo don’t look natural. Use normal lighting.")
 	}
 
 	// 6. Skew
@@ -559,12 +559,12 @@ func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
 		if result.SkewAngle != nil {
 			skewAngleStr = fmt.Sprintf("%.2f°", *result.SkewAngle)
 		}
-		errors = append(errors, "Image is skewed: skew angle "+skewAngleStr)
+		errors = append(errors, "Image is tilted. Hold the phone straight while clicking.")
 	}
 
 	// 7. Document Edges
 	if !result.HasDocumentEdges {
-		errors = append(errors, "Document edges not detected")
+		errors = append(errors, "Full paper is not visible. Make sure all corners are inside the photo.")
 	}
 
 	// 8. Contour Count
@@ -578,14 +578,14 @@ func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
 	// 9. Average Luminance & Saturation
 	// Check if average_luminance < 0.2 or > 0.9
 	if result.AvgLuminance <= 0.2 {
-		errors = append(errors, fmt.Sprintf("Average luminance too low: %.2f (minimum 0.2)", result.AvgLuminance))
+		errors = append(errors, "Image is very dull. Use more light.")
 	} else if result.AvgLuminance >= 0.9 {
-		errors = append(errors, fmt.Sprintf("Average luminance too high: %.2f (maximum 0.9)", result.AvgLuminance))
+		errors = append(errors, "Image is too bright. Take it in normal light.")
 	}
 
 	// Check if average_saturation < 0.05 (potentially grayscale or faded)
 	if result.AvgSaturation <= 0.05 {
-		errors = append(errors, fmt.Sprintf("Average saturation too low: %.2f (minimum 0.05)", result.AvgSaturation))
+		errors = append(errors, "Image looks faded. Use proper lighting.")
 	}
 
 	// 10. Channel Balance
@@ -594,8 +594,7 @@ func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
 	if math.Abs(channels[0]-channels[1]) >= 50 ||
 		math.Abs(channels[0]-channels[2]) >= 50 ||
 		math.Abs(channels[1]-channels[2]) >= 50 {
-		errors = append(errors, fmt.Sprintf("Channel imbalance detected: R=%.2f, G=%.2f, B=%.2f (max difference > 50)",
-			channels[0], channels[1], channels[2]))
+		errors = append(errors, "Colors look odd. Don’t use filters or colored lights.")
 	}
 
 	// Set the errors in the result if any were found
