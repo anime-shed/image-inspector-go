@@ -5,8 +5,71 @@ import (
 	"image"
 	"image/draw"
 	"math"
+	"runtime"
+	"sync"
 	"time"
 )
+
+// WorkerPool manages a pool of workers for concurrent image processing
+type WorkerPool struct {
+	workers    int
+	jobQueue   chan func()
+	wg         sync.WaitGroup
+	once       sync.Once
+	workerPool sync.Pool
+}
+
+// NewWorkerPool creates a new worker pool with the specified number of workers
+func NewWorkerPool(workers int) *WorkerPool {
+	if workers <= 0 {
+		workers = runtime.NumCPU()
+	}
+	
+	wp := &WorkerPool{
+		workers:  workers,
+		jobQueue: make(chan func(), workers*2), // Buffer to prevent blocking
+	}
+	
+	// Initialize worker pool for reusing worker goroutines
+	wp.workerPool.New = func() interface{} {
+		return make(chan func(), 1)
+	}
+	
+	return wp
+}
+
+// Start initializes and starts the worker pool
+func (wp *WorkerPool) Start() {
+	wp.once.Do(func() {
+		for i := 0; i < wp.workers; i++ {
+			go wp.worker()
+		}
+	})
+}
+
+// worker is the worker goroutine that processes jobs
+func (wp *WorkerPool) worker() {
+	for job := range wp.jobQueue {
+		job()
+		wp.wg.Done()
+	}
+}
+
+// Submit submits a job to the worker pool
+func (wp *WorkerPool) Submit(job func()) {
+	wp.wg.Add(1)
+	wp.jobQueue <- job
+}
+
+// Wait waits for all jobs to complete
+func (wp *WorkerPool) Wait() {
+	wp.wg.Wait()
+}
+
+// Close closes the worker pool
+func (wp *WorkerPool) Close() {
+	close(wp.jobQueue)
+}
 
 type AnalysisResult struct {
 	Overexposed    bool       `json:"overexposed"`
@@ -45,16 +108,47 @@ type ImageAnalyzer interface {
 	AnalyzeWithOCR(img image.Image, expectedText string) AnalysisResult
 }
 
-type imageAnalyzer struct{}
+type imageAnalyzer struct{
+	workerPool *WorkerPool
+	grayPool   sync.Pool
+	resultPool sync.Pool
+}
 
 func NewImageAnalyzer() (ImageAnalyzer, error) {
-	return &imageAnalyzer{}, nil
+	wp := NewWorkerPool(runtime.NumCPU())
+	wp.Start()
+	
+	analyzer := &imageAnalyzer{
+		workerPool: wp,
+	}
+	
+	// Initialize sync.Pool for grayscale images
+	analyzer.grayPool.New = func() interface{} {
+		return &image.Gray{}
+	}
+	
+	// Initialize sync.Pool for result objects
+	analyzer.resultPool.New = func() interface{} {
+		return &AnalysisResult{}
+	}
+	
+	return analyzer, nil
 }
 
 func (a *imageAnalyzer) Analyze(img image.Image, isOCR bool) AnalysisResult {
 	startTime := time.Now()
 	bounds := img.Bounds()
-	gray := image.NewGray(bounds)
+	
+	// Get grayscale image from pool
+	gray := a.grayPool.Get().(*image.Gray)
+	defer a.grayPool.Put(gray)
+	
+	// Reset and resize the grayscale image
+	*gray = image.Gray{
+		Pix:    make([]uint8, bounds.Dx()*bounds.Dy()),
+		Stride: bounds.Dx(),
+		Rect:   bounds,
+	}
 	draw.Draw(gray, bounds, img, bounds.Min, draw.Src)
 
 	metrics := a.calculateMetrics(img, bounds)
@@ -105,10 +199,14 @@ func (a *imageAnalyzer) calculateMetrics(img image.Image, bounds image.Rectangle
 		lum, sat, r, g, b float64
 	}
 
-	results := make(chan result, bounds.Dy())
-
+	// Use buffered channel sized for the number of rows
+	numRows := bounds.Dy()
+	results := make(chan result, numRows)
+	
+	// Process rows using worker pool instead of unbounded goroutines
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		go func(y int) {
+		y := y // Capture loop variable
+		a.workerPool.Submit(func() {
 			var lum, sat, r, g, b float64
 			for x := bounds.Min.X; x < bounds.Max.X; x++ {
 				rVal, gVal, bVal, _ := img.At(x, y).RGBA()
@@ -123,11 +221,15 @@ func (a *imageAnalyzer) calculateMetrics(img image.Image, bounds image.Rectangle
 				b += bf
 			}
 			results <- result{lum, sat, r, g, b}
-		}(y)
+		})
 	}
 
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		res := <-results
+	// Wait for all workers to complete
+	a.workerPool.Wait()
+	close(results)
+
+	// Collect results
+	for res := range results {
 		totalLum += res.lum
 		totalSat += res.sat
 		totalR += res.r

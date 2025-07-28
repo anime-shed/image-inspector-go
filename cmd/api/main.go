@@ -36,14 +36,14 @@ func main() {
 	}
 
 	// Create HTTP handler with dependencies
-	router := transport.NewHandler(imageAnalyzer, imageFetcher)
+	router := transport.NewHandler(imageAnalyzer, imageFetcher, cfg)
 
-	// Configure HTTP server
+	// Configure HTTP server with config-based timeouts
 	server := &http.Server{
 		Addr:         cfg.ServerAddress(),
 		Handler:      router,
-		ReadTimeout:  readTimeout,
-		WriteTimeout: writeTimeout,
+		ReadTimeout:  cfg.RequestTimeout,
+		WriteTimeout: cfg.RequestTimeout + 5*time.Second, // Add buffer for response
 	}
 
 	// Start server in goroutine

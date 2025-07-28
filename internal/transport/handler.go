@@ -4,18 +4,33 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go-image-inspector/internal/analyzer"
-	"go-image-inspector/internal/storage"
 	"net/http"
+	"net/url"
 	"time"
 
+	"go-image-inspector/internal/analyzer"
+	apperrors "go-image-inspector/internal/errors"
+	"go-image-inspector/internal/logger"
+	"go-image-inspector/internal/storage"
+	"go-image-inspector/pkg/config"
+
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
-const (
-	maxRequestBodySize = 1 << 20 // 1MB
-	requestTimeout     = 30 * time.Second
-)
+func validateImageURL(imageURL string) error {
+	// Parse URL
+	parsedURL, err := url.Parse(imageURL)
+	if err != nil {
+		return apperrors.NewValidationError("Invalid URL format", err)
+	}
+	// Check if host is present
+	if parsedURL.Host == "" {
+		return apperrors.NewValidationError("URL must have a valid host", nil)
+	}
+
+	return nil
+}
 
 type AnalysisRequest struct {
 	URL          string `json:"url" binding:"required,url"`
@@ -28,30 +43,55 @@ type ErrorResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
-func NewHandler(analyzer analyzer.ImageAnalyzer, fetcher storage.ImageFetcher) http.Handler {
+func NewHandler(analyzer analyzer.ImageAnalyzer, fetcher storage.ImageFetcher, cfg *config.Config) http.Handler {
 	r := gin.Default()
 
 	// Add middleware
 	r.Use(
-		requestSizeLimiter(maxRequestBodySize),
+		requestSizeLimiter(cfg.MaxRequestBodySize),
 		errorHandler(),
 	)
 
 	// Configure routes
 	r.GET("/health", healthCheck)
-	r.POST("/analyze", analyzeImage(analyzer, fetcher))
+	r.POST("/analyze", analyzeImage(analyzer, fetcher, cfg))
 
 	return r
 }
 
-func analyzeImage(a analyzer.ImageAnalyzer, f storage.ImageFetcher) gin.HandlerFunc {
+func analyzeImage(a analyzer.ImageAnalyzer, f storage.ImageFetcher, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), requestTimeout)
+		startTime := time.Now()
+		ctx, cancel := context.WithTimeout(c.Request.Context(), cfg.RequestTimeout)
 		defer cancel()
+
+		// Log request start
+		logger.WithFields(logrus.Fields{
+			"method":     c.Request.Method,
+			"path":       c.Request.URL.Path,
+			"user_agent": c.Request.UserAgent(),
+			"ip":         c.ClientIP(),
+		}).Info("Processing image analysis request")
 
 		var req AnalysisRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
+			logger.WithError(err).WithFields(logrus.Fields{
+				"ip": c.ClientIP(),
+			}).Error("Invalid request format")
 			respondError(c, http.StatusBadRequest, "invalid request format", err)
+			return
+		}
+
+		// Validate image URL
+		if err := validateImageURL(req.URL); err != nil {
+			logger.WithError(err).WithFields(logrus.Fields{
+				"url": req.URL,
+				"ip":  c.ClientIP(),
+			}).Error("Invalid image URL")
+
+			// Use custom error status code
+			statusCode := apperrors.GetStatusCode(err)
+			respondError(c, statusCode, "invalid image URL", err)
 			return
 		}
 
@@ -60,9 +100,28 @@ func analyzeImage(a analyzer.ImageAnalyzer, f storage.ImageFetcher) gin.HandlerF
 			req.IsOCR = isOCRQuery == "true"
 		}
 
+		// Log image fetch attempt
+		logger.WithFields(logrus.Fields{
+			"url":    req.URL,
+			"is_ocr": req.IsOCR,
+		}).Debug("Fetching image")
+
 		img, err := f.FetchImage(ctx, req.URL)
 		if err != nil {
-			respondError(c, http.StatusInternalServerError, "failed to fetch image", err)
+			// Wrap network/fetch errors with custom error type
+			var fetchErr *apperrors.AppError
+			if errors.Is(err, context.DeadlineExceeded) {
+				fetchErr = apperrors.NewTimeoutError("Image fetch timeout", err)
+			} else {
+				fetchErr = apperrors.NewNetworkError("Failed to fetch image", err)
+			}
+
+			logger.WithError(fetchErr).WithFields(logrus.Fields{
+				"url": req.URL,
+				"ip":  c.ClientIP(),
+			}).Error("Failed to fetch image")
+
+			respondError(c, fetchErr.StatusCode, "failed to fetch image", fetchErr)
 			return
 		}
 
@@ -74,6 +133,18 @@ func analyzeImage(a analyzer.ImageAnalyzer, f storage.ImageFetcher) gin.HandlerF
 			// Use regular analysis when isOCR is false
 			result = a.Analyze(img, false)
 		}
+
+		// Log successful completion
+		duration := time.Since(startTime)
+		logger.WithFields(logrus.Fields{
+			"url":                req.URL,
+			"is_ocr":             req.IsOCR,
+			"processing_time_ms": duration.Milliseconds(),
+			"overexposed":        result.Overexposed,
+			"oversaturated":      result.Oversaturated,
+			"blurry":             result.Blurry,
+		}).Info("Image analysis completed successfully")
+
 		c.JSON(http.StatusOK, result)
 	}
 }
@@ -106,6 +177,12 @@ func errorHandler() gin.HandlerFunc {
 }
 
 func determineStatusCode(err error) int {
+	// Check if it's a custom app error first
+	if appErr, ok := err.(*apperrors.AppError); ok {
+		return appErr.StatusCode
+	}
+
+	// Fallback to context-based errors
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return http.StatusGatewayTimeout
@@ -117,6 +194,15 @@ func determineStatusCode(err error) int {
 }
 
 func respondError(c *gin.Context, code int, message string, err error) {
+	// Log the error with context
+	logger.WithError(err).WithFields(logrus.Fields{
+		"status_code": code,
+		"message":     message,
+		"path":        c.Request.URL.Path,
+		"method":      c.Request.Method,
+		"ip":          c.ClientIP(),
+	}).Error("Request failed")
+
 	c.AbortWithStatusJSON(code, ErrorResponse{
 		Error:   http.StatusText(code),
 		Message: fmt.Sprintf("%s: %v", message, err),
