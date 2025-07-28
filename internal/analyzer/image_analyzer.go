@@ -72,6 +72,7 @@ func (wp *WorkerPool) Close() {
 }
 
 type AnalysisResult struct {
+	Timestamp      string     `json:"timestamp"`
 	Overexposed    bool       `json:"overexposed"`
 	Oversaturated  bool       `json:"oversaturated"`
 	IncorrectWB    bool       `json:"incorrect_white_balance"`
@@ -95,14 +96,17 @@ type AnalysisResult struct {
 	ProcessingTimeSec float64  `json:"processing_time_sec,omitempty"`
 
 	// OCR related fields
-	WER      float64 `json:"word_error_rate,omitempty"`
-	CER      float64 `json:"character_error_rate,omitempty"`
-	OCRError string  `json:"ocr_error,omitempty"`
+	WER           float64 `json:"word_error_rate,omitempty"`
+	CER           float64 `json:"character_error_rate,omitempty"`
+	OCRError      string  `json:"ocr_error,omitempty"`
+	OCRText       string  `json:"ocr_text,omitempty"`
+	ExpectedText  string  `json:"expected_text,omitempty"`
 
 	// Quality validation errors
 	Errors []string `json:"errors,omitempty"`
 }
 
+// ImageAnalyzer provides image analysis capabilities
 type ImageAnalyzer interface {
 	Analyze(img image.Image, isOCR bool) AnalysisResult
 	AnalyzeWithOCR(img image.Image, expectedText string) AnalysisResult
@@ -167,6 +171,7 @@ func (a *imageAnalyzer) Analyze(img image.Image, isOCR bool) AnalysisResult {
 	}
 
 	result := AnalysisResult{
+		Timestamp:      time.Now().UTC().Format(time.RFC3339),
 		Overexposed:    metrics.avgLuminance > overexposedThreshold || metrics.avgLuminance < 0.15,
 		Oversaturated:  metrics.avgSaturation > oversaturatedThreshold,
 		IncorrectWB:    a.hasWhiteBalanceIssue(metrics.avgR, metrics.avgG, metrics.avgB),

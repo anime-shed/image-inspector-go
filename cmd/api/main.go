@@ -2,71 +2,70 @@ package main
 
 import (
 	"context"
-	"errors"
-	"go-image-inspector/internal/analyzer"
-	"go-image-inspector/internal/storage"
-	"go-image-inspector/internal/transport"
-	"go-image-inspector/pkg/config"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-)
 
-const (
-	shutdownTimeout = 10 * time.Second
-	readTimeout     = 15 * time.Second
-	writeTimeout    = 30 * time.Second
+	"go-image-inspector/internal/container"
+	"go-image-inspector/internal/transport"
+
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
-	// Initialize configuration
-	cfg, err := config.LoadFromEnv()
+	// Initialize dependency injection container
+	c, err := container.NewContainer()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		log.Fatalf("Failed to initialize container: %v", err)
 	}
 
-	// Initialize dependencies
-	imageFetcher := storage.NewHTTPImageFetcher()
-	imageAnalyzer, err := analyzer.NewImageAnalyzer()
-	if err != nil {
-		log.Fatalf("Failed to create image analyzer: %v", err)
-	}
+	cfg := c.GetConfig()
 
-	// Create HTTP handler with dependencies
-	router := transport.NewHandler(imageAnalyzer, imageFetcher, cfg)
+	// Setup structured logging
+	logrus.SetFormatter(&logrus.JSONFormatter{})
+	logrus.SetLevel(logrus.InfoLevel)
 
-	// Configure HTTP server with config-based timeouts
+	// Create HTTP handler with dependencies from container
+	handler := transport.NewHandler(c.GetImageAnalyzer(), c.GetImageFetcher(), cfg)
+
+	// Create HTTP server with configurable timeouts
 	server := &http.Server{
 		Addr:         cfg.ServerAddress(),
-		Handler:      router,
+		Handler:      handler,
 		ReadTimeout:  cfg.RequestTimeout,
-		WriteTimeout: cfg.RequestTimeout + 5*time.Second, // Add buffer for response
+		WriteTimeout: cfg.RequestTimeout,
 	}
 
-	// Start server in goroutine
+	// Start server in a goroutine
 	go func() {
-		log.Printf("Starting server on %s", server.Addr)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("Server failed: %v", err)
+		logrus.WithFields(logrus.Fields{
+			"address": cfg.ServerAddress(),
+			"timeout": cfg.RequestTimeout,
+		}).Info("Starting HTTP server")
+
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logrus.WithError(err).Fatal("Failed to start server")
 		}
 	}()
 
-	// Graceful shutdown handling
+	// Wait for interrupt signal to gracefully shutdown the server
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	logrus.Info("Shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	// Create a deadline for shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Attempt graceful shutdown
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		logrus.WithError(err).Fatal("Server forced to shutdown")
 	}
 
-	log.Println("Server exited properly")
+	logrus.Info("Server exited")
 }
