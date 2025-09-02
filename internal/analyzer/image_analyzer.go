@@ -185,6 +185,9 @@ func (a *imageAnalyzer) Analyze(img image.Image, isOCR bool) AnalysisResult {
 	// Enhanced quality checks when isOCR is true
 	if isOCR {
 		a.performEnhancedQualityChecks(img, gray, &result)
+	} else {
+		// For non-OCR analysis, validate basic quality conditions
+		a.validateBasicQualityConditions(&result)
 	}
 
 	result.ProcessingTimeSec = time.Since(startTime).Seconds()
@@ -622,6 +625,54 @@ func (a *imageAnalyzer) isQRFinderPattern(gray *image.Gray, centerX, centerY, ra
 }
 
 // validateQualityConditions checks all quality conditions and populates the errors array
+// validateBasicQualityConditions validates basic image quality for non-OCR analysis
+func (a *imageAnalyzer) validateBasicQualityConditions(result *AnalysisResult) {
+	var errors []string
+
+	// 1. Blurriness (Laplacian Variance)
+	if result.LaplacianVar <= 350 {
+		errors = append(errors, "Image is blurry. Please hold the camera steady and try again.")
+	}
+
+	// 2. Overexposure / Oversaturation
+	if result.Overexposed {
+		errors = append(errors, "Image has too much light. Move to a less bright area.")
+	}
+	if result.Oversaturated {
+		errors = append(errors, "Colors are too strong. Use normal light while clicking.")
+	}
+
+	// 3. White Balance
+	if result.IncorrectWB {
+		errors = append(errors, "Colors in the photo don't look natural. Use normal lighting.")
+	}
+
+	// 4. Average Luminance & Saturation
+	if result.AvgLuminance <= 0.2 {
+		errors = append(errors, "Image is very dull. Use more light.")
+	} else if result.AvgLuminance >= 0.9 {
+		errors = append(errors, "Image is too bright. Take it in normal light.")
+	}
+
+	if result.AvgSaturation <= 0.05 {
+		errors = append(errors, "Image looks faded. Use proper lighting.")
+	}
+
+	// 5. Channel Balance
+	channels := result.ChannelBalance
+	if math.Abs(channels[0]-channels[1]) >= 50 ||
+		math.Abs(channels[0]-channels[2]) >= 50 ||
+		math.Abs(channels[1]-channels[2]) >= 50 {
+		errors = append(errors, "Colors look odd. Don't use filters or colored lights.")
+	}
+
+	// Set the errors in the result if any were found
+	if len(errors) > 0 {
+		result.Errors = errors
+	}
+}
+
+// validateQualityConditions validates comprehensive image quality for OCR analysis
 func (a *imageAnalyzer) validateQualityConditions(result *AnalysisResult) {
 	var errors []string
 
