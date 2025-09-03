@@ -13,6 +13,7 @@ import (
 	"go-image-inspector/internal/service"
 	"go-image-inspector/pkg/config"
 	"go-image-inspector/pkg/models"
+	"go-image-inspector/pkg/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -29,7 +30,7 @@ type AnalysisOptionsRequest = models.AnalysisOptionsRequest
 // ErrorResponse is now an alias to the shared models.ErrorResponse
 type ErrorResponse = models.ErrorResponse
 
-func NewHandler(analysisService service.ImageAnalysisService, cfg *config.Config) http.Handler {
+func NewHandler(analysisService service.ImageAnalysisService, detailedService *services.DetailedAnalysisService, cfg *config.Config) http.Handler {
 	r := gin.Default()
 
 	// Add middleware
@@ -42,6 +43,7 @@ func NewHandler(analysisService service.ImageAnalysisService, cfg *config.Config
 	r.GET("/health", healthCheck)
 	r.POST("/analyze", analyzeImage(analysisService, cfg))
 	r.POST("/analyze/options", analyzeImageWithOptions(analysisService, cfg))
+	r.POST("/detailed-analyze", detailedAnalyzeImage(detailedService, cfg))
 
 	return r
 }
@@ -204,6 +206,63 @@ func analyzeImageWithOptions(analysisService service.ImageAnalysisService, cfg *
 			"oversaturated":      response.Quality.Oversaturated,
 			"blurry":             response.Quality.Blurry,
 		}).Info("Image analysis with options completed successfully")
+
+		c.JSON(http.StatusOK, response)
+	}
+}
+
+func detailedAnalyzeImage(detailedService *services.DetailedAnalysisService, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		startTime := time.Now()
+
+		// Log request start
+		logger.WithFields(logrus.Fields{
+			"method":     c.Request.Method,
+			"path":       c.Request.URL.Path,
+			"user_agent": c.Request.UserAgent(),
+			"ip":         c.ClientIP(),
+		}).Info("Processing detailed image analysis request")
+
+		var req AnalysisRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			logger.WithError(err).WithFields(logrus.Fields{
+				"ip": c.ClientIP(),
+			}).Error("Invalid request format")
+			respondError(c, http.StatusBadRequest, "invalid request format", err)
+			return
+		}
+
+		// Log analysis attempt
+		logger.WithFields(logrus.Fields{
+			"url": req.URL,
+		}).Debug("Starting detailed image analysis")
+
+		// Create detailed analysis request
+		detailedReq := models.DetailedAnalysisRequest{
+			URL: req.URL,
+		}
+		
+		// Delegate to detailed service
+		response, err := detailedService.AnalyzeImageDetailed(detailedReq)
+		if err != nil {
+			// Log error with context
+			logger.WithError(err).WithFields(logrus.Fields{
+				"url": req.URL,
+				"ip":  c.ClientIP(),
+			}).Error("Detailed image analysis failed")
+
+			// Use custom error status code
+			statusCode := apperrors.GetStatusCode(err)
+			respondError(c, statusCode, "detailed image analysis failed", err)
+			return
+		}
+
+		// Log successful completion
+		duration := time.Since(startTime)
+		logger.WithFields(logrus.Fields{
+			"url":                req.URL,
+			"processing_time_ms": duration.Milliseconds(),
+		}).Info("Detailed image analysis completed successfully")
 
 		c.JSON(http.StatusOK, response)
 	}

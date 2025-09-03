@@ -33,9 +33,7 @@ func TestWorkerPool_SubmitAndWait(t *testing.T) {
 	var mu sync.Mutex
 
 	for i := 0; i < 5; i++ {
-		pool.wg.Add(1)
 		pool.Submit(func() {
-			defer pool.wg.Done()
 			mu.Lock()
 			counter++
 			mu.Unlock()
@@ -60,9 +58,7 @@ func TestWorkerPool_ConcurrentJobs(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		value := i
-		pool.wg.Add(1)
 		pool.Submit(func() {
-			defer pool.wg.Done()
 			// Simulate some work
 			processedValue := value * 2
 			mu.Lock()
@@ -89,9 +85,7 @@ func TestWorkerPool_StartOnce(t *testing.T) {
 
 	// Test that pool still works after multiple Start calls
 	var executed bool
-	pool.wg.Add(1)
 	pool.Submit(func() {
-		defer pool.wg.Done()
 		executed = true
 	})
 
@@ -108,9 +102,7 @@ func TestWorkerPool_CloseAndResubmit(t *testing.T) {
 
 	// Submit a job
 	var executed bool
-	pool.wg.Add(1)
 	pool.Submit(func() {
-		defer pool.wg.Done()
 		executed = true
 	})
 
@@ -132,9 +124,7 @@ func TestWorkerPool_StressTest(t *testing.T) {
 	var completed int32
 
 	for i := 0; i < numJobs; i++ {
-		pool.wg.Add(1)
 		pool.Submit(func() {
-			defer pool.wg.Done()
 			atomic.AddInt32(&completed, 1)
 		})
 	}

@@ -169,7 +169,9 @@ func TestAnalyzeWithOCR(t *testing.T) {
 	result := analyzer.AnalyzeWithOCR(img, expectedText)
 
 	// Verify OCR-specific fields
-	if result.OCRResult == nil || result.OCRResult.ExpectedText != expectedText {
+	if result.OCRResult == nil {
+		t.Errorf("Expected OCRResult to be non-nil, but got nil")
+	} else if result.OCRResult.ExpectedText != expectedText {
 		t.Errorf("Expected text '%s', got '%s'", expectedText, result.OCRResult.ExpectedText)
 	}
 	// OCR is not implemented yet, so we expect an error message

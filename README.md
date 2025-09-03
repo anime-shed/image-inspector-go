@@ -80,10 +80,26 @@ The application can be configured using environment variables. The following var
 
 ## API Endpoints
 
+### Basic Analysis
 - `POST /analyze`: Analyze an image with optional OCR quality validation:
    - `url`: The URL of the image to be analyzed.
    - `is_ocr`: (optional) Boolean flag to enable OCR quality validation.
    - `expected_text`: (optional) This parameter is retained for API compatibility but is not used in the current version.
+
+### Advanced Analysis Options
+- `POST /analyze/options`: Analyze an image with custom analysis options:
+   - `url`: The URL of the image to be analyzed.
+   - `options`: Custom analysis configuration options.
+
+### Detailed Analysis (New)
+- `POST /detailed-analyze`: Comprehensive image analysis with detailed metrics and thresholds:
+   - `url`: The URL of the image to be analyzed.
+   - `analysis_mode`: (optional) Analysis mode - "basic", "ocr", or "comprehensive" (default: "comprehensive").
+   - `include_performance`: (optional) Include performance metrics in response.
+   - `include_raw_metrics`: (optional) Include raw calculation metrics.
+   - `custom_thresholds`: (optional) Override default quality thresholds.
+   - `feature_flags`: (optional) Enable/disable specific analysis features.
+   - `expected_text`: (optional) Expected text for OCR validation.
 
 ## Usage Examples
 
@@ -103,6 +119,32 @@ curl -X POST http://localhost:8080/analyze \
   -d '{"url": "https://example.com/text-image.jpg", "is_ocr": true}'
 ```
 
+### Detailed Analysis (Comprehensive)
+
+```bash
+curl -X POST http://localhost:8080/detailed-analyze \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/image.jpg"}'
+```
+
+### Detailed Analysis with Custom Options
+
+```bash
+curl -X POST http://localhost:8080/detailed-analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/image.jpg",
+    "analysis_mode": "comprehensive",
+    "include_performance": true,
+    "include_raw_metrics": true,
+    "custom_thresholds": {
+      "blur_threshold": 100.0,
+      "overexposure_threshold": 0.05,
+      "min_resolution": 500000
+    }
+  }'
+```
+
 ## Troubleshooting
 
 ### OCR Functionality
@@ -118,7 +160,7 @@ If you encounter build errors:
 1. **Check Go version:** Ensure you have Go 1.16 or higher installed
 2. **Use Docker:** Build using the provided Dockerfile which includes all dependencies
 
-### Sample Response (OCR Quality Analysis)
+### Sample Response (Basic OCR Quality Analysis)
 
 ```json
 {
@@ -140,10 +182,108 @@ If you encounter build errors:
 }
 ```
 
+### Sample Response (Detailed Analysis)
+
+```json
+{
+  "image_url": "https://example.com/image.jpg",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "processing_time_sec": 1.42,
+  "image_metadata": {
+    "width": 1920,
+    "height": 1080,
+    "format": "image/jpeg",
+    "content_type": "image/jpeg",
+    "content_length": 245760
+  },
+  "quality_analysis": {
+    "overexposed": false,
+    "oversaturated": false,
+    "incorrect_white_balance": false,
+    "blurry": false,
+    "is_low_resolution": false,
+    "is_too_dark": false,
+    "is_too_bright": false,
+    "is_skewed": false,
+    "is_valid": true,
+    "is_ocr_ready": true,
+    "has_critical_issues": false,
+    "overall_quality_score": 85.5,
+    "sharpness_score": 89.2,
+    "exposure_score": 92.1,
+    "color_score": 78.3
+  },
+  "raw_metrics": {
+    "laplacian_variance": 150.0,
+    "brightness": 128.0,
+    "average_saturation": 0.5,
+    "channel_balance": [128, 128, 128],
+    "overexposed_pixel_ratio": 0.02,
+    "underexposed_pixel_ratio": 0.05,
+    "dynamic_range": 200,
+    "total_pixels": 2073600,
+    "aspect_ratio": 1.78
+  },
+  "applied_thresholds": {
+    "min_laplacian_variance": 100,
+    "overexposure_threshold": 0.1,
+    "oversaturation_threshold": 0.8,
+    "max_skew_angle": 5,
+    "min_total_pixels": 10000
+  },
+  "quality_checks": [
+    {
+      "check_name": "blur_detection",
+      "passed": true,
+      "severity": "info",
+      "actual_value": 150.0,
+      "threshold_value": 100.0,
+      "message": "Image sharpness is acceptable",
+      "confidence": 0.85
+    }
+  ],
+  "overall_assessment": {
+    "quality_grade": "B",
+    "usability_score": 85.5,
+    "suitable_for": ["web", "display", "ocr"],
+    "recommended_actions": []
+  },
+  "processing_details": {
+    "analysis_mode": "comprehensive",
+    "features_analyzed": ["sharpness", "exposure", "color", "resolution", "geometry"],
+    "performance_metrics": {
+      "total_processing_time_ms": 1420.67,
+      "image_fetch_time_ms": 1200.45,
+      "analysis_time_ms": 220.22
+    }
+  }
+}
+```
+
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request.
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Acknowledgments
+
+This project makes use of several excellent open-source libraries and tools:
+
+### Core Dependencies
+- **[Gin Web Framework](https://github.com/gin-gonic/gin)** - High-performance HTTP web framework for Go
+- **[Logrus](https://github.com/sirupsen/logrus)** - Structured logging for Go
+- **[Viper](https://github.com/spf13/viper)** - Configuration management library
+- **[Go Image](https://golang.org/pkg/image/)** - Go's built-in image processing package
+
+### Development Tools
+- **[Docker](https://www.docker.com/)** - Containerization platform
+- **[Alpine Linux](https://alpinelinux.org/)** - Security-oriented, lightweight Linux distribution used in Docker images
+
+### Testing & Quality
+- **[Testify](https://github.com/stretchr/testify)** - Testing toolkit for Go (if used in tests)
+- **[Go Modules](https://golang.org/ref/mod)** - Dependency management system
+
+We are grateful to the maintainers and contributors of these projects for their excellent work that makes this image analysis service possible.
 
 ## License
 
-This project is licensed under the MIT License - see the [MIT](MIT) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

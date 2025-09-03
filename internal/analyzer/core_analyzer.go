@@ -74,12 +74,19 @@ func (ca *coreAnalyzer) AnalyzeWithOptions(img image.Image, options AnalysisOpti
 	// Convert to grayscale for analysis
 	bounds := img.Bounds()
 	gray := ca.grayPool.Get().(*image.Gray)
-	gray.Pix = nil
-	gray.Stride = 0
-	gray.Rect = image.Rectangle{}
 	defer ca.grayPool.Put(gray)
 
-	*gray = *image.NewGray(bounds)
+	// Reuse the pooled gray image by properly setting up its fields
+	w, h := bounds.Dx(), bounds.Dy()
+	requiredLen := w * h
+	if cap(gray.Pix) < requiredLen {
+		gray.Pix = make([]uint8, requiredLen)
+	} else {
+		gray.Pix = gray.Pix[:requiredLen]
+	}
+	gray.Stride = w
+	gray.Rect = bounds
+
 	draw.Draw(gray, bounds, img, bounds.Min, draw.Src)
 
 	// Calculate basic metrics

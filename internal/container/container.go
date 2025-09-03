@@ -9,16 +9,18 @@ import (
 	"go-image-inspector/internal/storage"
 	"go-image-inspector/internal/transport"
 	"go-image-inspector/pkg/config"
+	"go-image-inspector/pkg/services"
 )
 
 // Container holds all application dependencies
 type Container struct {
-	config               *config.Config
-	imageFetcher         storage.ImageFetcher
-	imageAnalyzer        analyzer.ImageAnalyzer
-	imageRepository      repository.ImageRepository
-	imageAnalysisService service.ImageAnalysisService
-	handler              http.Handler
+	config                  *config.Config
+	imageFetcher            storage.ImageFetcher
+	imageAnalyzer           analyzer.ImageAnalyzer
+	imageRepository         repository.ImageRepository
+	imageAnalysisService    service.ImageAnalysisService
+	detailedAnalysisService *services.DetailedAnalysisService
+	handler                 http.Handler
 }
 
 // NewContainer creates a new dependency injection container
@@ -38,15 +40,20 @@ func NewContainer() (*Container, error) {
 
 	imageRepository := repository.NewHTTPImageRepository(imageFetcher)
 	imageAnalysisService := service.NewImageAnalysisService(imageRepository, imageAnalyzer)
-	handler := transport.NewHandler(imageAnalysisService, cfg)
+	
+	// Initialize detailed analysis service
+	detailedAnalysisService := services.NewDetailedAnalysisService(imageAnalyzer, imageAnalysisService)
+	
+	handler := transport.NewHandler(imageAnalysisService, detailedAnalysisService, cfg)
 
 	return &Container{
-		config:               cfg,
-		imageFetcher:         imageFetcher,
-		imageAnalyzer:        imageAnalyzer,
-		imageRepository:      imageRepository,
-		imageAnalysisService: imageAnalysisService,
-		handler:              handler,
+		config:                  cfg,
+		imageFetcher:            imageFetcher,
+		imageAnalyzer:           imageAnalyzer,
+		imageRepository:         imageRepository,
+		imageAnalysisService:    imageAnalysisService,
+		detailedAnalysisService: detailedAnalysisService,
+		handler:                 handler,
 	}, nil
 }
 

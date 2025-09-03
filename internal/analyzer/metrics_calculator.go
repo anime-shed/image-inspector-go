@@ -159,12 +159,22 @@ func (mc *metricsCalculator) calculateSkewAngle(coords [][2]int, width, height i
 	slope := (n*sumXY - sumX*sumY) / denominator
 	angle := math.Atan(slope) * 180 / math.Pi
 
-	// Normalize angle to [-45, 45] range
-	for angle > 45 {
-		angle -= 90
+	// Check for invalid angle values to prevent infinite loops
+	if math.IsNaN(angle) || math.IsInf(angle, 0) {
+		return 0
 	}
-	for angle < -45 {
+
+	// Normalize angle to [-45, 45] range with bounded iteration safeguard
+	maxIterations := 10 // Safety limit to prevent infinite loops
+	iterations := 0
+	for angle > 45 && iterations < maxIterations {
+		angle -= 90
+		iterations++
+	}
+	iterations = 0
+	for angle < -45 && iterations < maxIterations {
 		angle += 90
+		iterations++
 	}
 
 	return angle
