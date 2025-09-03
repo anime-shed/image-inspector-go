@@ -2,20 +2,23 @@ package container
 
 import (
 	"fmt"
+	"net/http"
 	"go-image-inspector/internal/analyzer"
 	"go-image-inspector/internal/repository"
 	"go-image-inspector/internal/service"
 	"go-image-inspector/internal/storage"
+	"go-image-inspector/internal/transport"
 	"go-image-inspector/pkg/config"
 )
 
 // Container holds all application dependencies
 type Container struct {
-	Config               *config.Config
-	ImageFetcher         storage.ImageFetcher
-	ImageAnalyzer        analyzer.ImageAnalyzer
-	ImageRepository      repository.ImageRepository
-	ImageAnalysisService service.ImageAnalysisService
+	config               *config.Config
+	imageFetcher         storage.ImageFetcher
+	imageAnalyzer        analyzer.ImageAnalyzer
+	imageRepository      repository.ImageRepository
+	imageAnalysisService service.ImageAnalysisService
+	handler              http.Handler
 }
 
 // NewContainer creates a new dependency injection container
@@ -26,51 +29,33 @@ func NewContainer() (*Container, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Create image fetcher
+	// Build dependency graph
 	imageFetcher := storage.NewHTTPImageFetcher()
-
-	// Create image analyzer
 	imageAnalyzer, err := analyzer.NewImageAnalyzer()
 	if err != nil {
 		return nil, err
 	}
 
-	// Create image repository
 	imageRepository := repository.NewHTTPImageRepository(imageFetcher)
-
-	// Create image analysis service
 	imageAnalysisService := service.NewImageAnalysisService(imageRepository, imageAnalyzer)
+	handler := transport.NewHandler(imageAnalysisService, cfg)
 
 	return &Container{
-		Config:               cfg,
-		ImageFetcher:         imageFetcher,
-		ImageAnalyzer:        imageAnalyzer,
-		ImageRepository:      imageRepository,
-		ImageAnalysisService: imageAnalysisService,
+		config:               cfg,
+		imageFetcher:         imageFetcher,
+		imageAnalyzer:        imageAnalyzer,
+		imageRepository:      imageRepository,
+		imageAnalysisService: imageAnalysisService,
+		handler:              handler,
 	}, nil
 }
 
-// GetConfig returns the configuration
-func (c *Container) GetConfig() *config.Config {
-	return c.Config
+// Handler returns the HTTP handler
+func (c *Container) Handler() http.Handler {
+	return c.handler
 }
 
-// GetImageFetcher returns the image fetcher
-func (c *Container) GetImageFetcher() storage.ImageFetcher {
-	return c.ImageFetcher
-}
-
-// GetImageAnalyzer returns the image analyzer
-func (c *Container) GetImageAnalyzer() analyzer.ImageAnalyzer {
-	return c.ImageAnalyzer
-}
-
-// GetImageRepository returns the image repository
-func (c *Container) GetImageRepository() repository.ImageRepository {
-	return c.ImageRepository
-}
-
-// GetImageAnalysisService returns the image analysis service
-func (c *Container) GetImageAnalysisService() service.ImageAnalysisService {
-	return c.ImageAnalysisService
+// Config returns the configuration
+func (c *Container) Config() *config.Config {
+	return c.config
 }

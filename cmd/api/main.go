@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"go-image-inspector/internal/container"
-	"go-image-inspector/internal/transport"
 
 	"github.com/sirupsen/logrus"
 )
@@ -22,14 +21,14 @@ func main() {
 		log.Fatalf("Failed to initialize container: %v", err)
 	}
 
-	cfg := c.GetConfig()
+	cfg := c.Config()
 
 	// Setup structured logging
 	logrus.SetFormatter(&logrus.JSONFormatter{})
 	logrus.SetLevel(logrus.InfoLevel)
 
-	// Create HTTP handler with dependencies from container
-	handler := transport.NewHandler(c.GetImageAnalyzer(), c.GetImageFetcher(), cfg)
+	// Get HTTP handler from container (already configured with all dependencies)
+	handler := c.Handler()
 
 	// Create HTTP server with configurable timeouts
 	server := &http.Server{

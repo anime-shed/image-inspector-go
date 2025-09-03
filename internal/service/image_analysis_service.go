@@ -5,50 +5,32 @@ import (
 	"go-image-inspector/internal/analyzer"
 	"go-image-inspector/internal/repository"
 	apperrors "go-image-inspector/internal/errors"
+	"go-image-inspector/pkg/models"
 )
 
-// ImageAnalysisService defines the interface for image analysis business logic
+// ImageAnalysisService defines the interface for image analysis operations
 type ImageAnalysisService interface {
-	AnalyzeImage(ctx context.Context, imageURL string, isOCR bool) (*ImageAnalysisResponse, error)
-	AnalyzeImageWithOCR(ctx context.Context, imageURL string, expectedText string) (*ImageAnalysisResponse, error)
+	// Legacy methods for backward compatibility
+	AnalyzeImage(ctx context.Context, imageURL string, isOCR bool) (*models.ImageAnalysisResponse, error)
+	AnalyzeImageWithOCR(ctx context.Context, imageURL string, expectedText string) (*models.ImageAnalysisResponse, error)
+	
+	// New options-based method
+	AnalyzeImageWithOptions(ctx context.Context, imageURL string, options analyzer.AnalysisOptions) (*models.ImageAnalysisResponse, error)
+	
 	ValidateImageURL(imageURL string) error
 }
 
-// ImageAnalysisResponse represents the response from image analysis
-type ImageAnalysisResponse struct {
-	ImageURL          string     `json:"image_url"`
-	Timestamp         string     `json:"timestamp"`
-	ProcessingTimeSec float64    `json:"processing_time_sec"`
-	Quality           Quality    `json:"quality"`
-	Metrics           Metrics    `json:"metrics"`
-	OCRResult         *OCRResult `json:"ocr_result,omitempty"`
-	Errors            []string   `json:"errors,omitempty"`
-}
+// ImageAnalysisResponse is now an alias to the shared models.ImageAnalysisResponse
+type ImageAnalysisResponse = models.ImageAnalysisResponse
 
-// Quality represents image quality assessment
-type Quality struct {
-	Overexposed   bool `json:"overexposed"`
-	Oversaturated bool `json:"oversaturated"`
-	IncorrectWB   bool `json:"incorrect_wb"`
-	Blurry        bool `json:"blurry"`
-	IsValid       bool `json:"is_valid"`
-}
+// Quality is now an alias to the shared models.Quality
+type Quality = models.Quality
 
-// Metrics represents image analysis metrics
-type Metrics struct {
-	LaplacianVar      float64    `json:"laplacian_var"`
-	AvgLuminance      float64    `json:"avg_luminance"`
-	AvgSaturation     float64    `json:"avg_saturation"`
-	ChannelBalance    [3]float64 `json:"channel_balance"`
-}
+// Metrics is now an alias to the shared models.ImageMetrics
+type Metrics = models.ImageMetrics
 
-// OCRResult represents OCR analysis results
-type OCRResult struct {
-	ExtractedText string  `json:"extracted_text"`
-	ExpectedText  string  `json:"expected_text,omitempty"`
-	Confidence    float64 `json:"confidence"`
-	MatchScore    float64 `json:"match_score,omitempty"`
-}
+// OCRResult is now an alias to the shared models.OCRResult
+type OCRResult = models.OCRResult
 
 // imageAnalysisService implements ImageAnalysisService
 type imageAnalysisService struct {
@@ -64,8 +46,15 @@ func NewImageAnalysisService(imageRepo repository.ImageRepository, analyzer anal
 	}
 }
 
-// AnalyzeImage performs image analysis
+// AnalyzeImage performs image analysis (legacy method for backward compatibility)
 func (s *imageAnalysisService) AnalyzeImage(ctx context.Context, imageURL string, isOCR bool) (*ImageAnalysisResponse, error) {
+	options := analyzer.DefaultOptions()
+	options.OCRMode = isOCR
+	return s.AnalyzeImageWithOptions(ctx, imageURL, options)
+}
+
+// AnalyzeImageWithOptions performs image analysis with flexible configuration
+func (s *imageAnalysisService) AnalyzeImageWithOptions(ctx context.Context, imageURL string, options analyzer.AnalysisOptions) (*ImageAnalysisResponse, error) {
 	// Validate URL
 	if err := s.ValidateImageURL(imageURL); err != nil {
 		return nil, apperrors.NewValidationError("invalid image URL", err)
@@ -77,45 +66,20 @@ func (s *imageAnalysisService) AnalyzeImage(ctx context.Context, imageURL string
 		return nil, apperrors.NewNetworkError("failed to fetch image", err)
 	}
 
-	// Analyze image
-	result := s.analyzer.Analyze(img, isOCR)
+	// Analyze image with options
+	result := s.analyzer.AnalyzeWithOptions(img, options)
 
 	// Convert to service response
-	response := s.convertToResponse(imageURL, result)
+	response := s.convertToResponse(imageURL, &result)
 	
 	return response, nil
 }
 
-// AnalyzeImageWithOCR performs OCR-specific image analysis
+// AnalyzeImageWithOCR performs OCR-specific image analysis (legacy method for backward compatibility)
 func (s *imageAnalysisService) AnalyzeImageWithOCR(ctx context.Context, imageURL string, expectedText string) (*ImageAnalysisResponse, error) {
-	// Validate URL
-	if err := s.ValidateImageURL(imageURL); err != nil {
-		return nil, apperrors.NewValidationError("invalid image URL", err)
-	}
-
-	// Fetch image
-	img, err := s.imageRepo.FetchImage(ctx, imageURL)
-	if err != nil {
-		return nil, apperrors.NewNetworkError("failed to fetch image", err)
-	}
-
-	// Analyze image with OCR
-	result := s.analyzer.AnalyzeWithOCR(img, expectedText)
-
-	// Convert to service response
-	response := s.convertToResponse(imageURL, result)
-	
-	// Add OCR-specific data
-	if result.OCRText != "" || result.ExpectedText != "" {
-		response.OCRResult = &OCRResult{
-			ExtractedText: result.OCRText,
-			ExpectedText:  result.ExpectedText,
-			Confidence:    0.0, // TODO: Implement confidence calculation
-			MatchScore:    0.0, // TODO: Implement match score calculation
-		}
-	}
-	
-	return response, nil
+	options := analyzer.OCROptions()
+	options.OCRExpectedText = expectedText
+	return s.AnalyzeImageWithOptions(ctx, imageURL, options)
 }
 
 // ValidateImageURL validates the image URL
@@ -124,24 +88,36 @@ func (s *imageAnalysisService) ValidateImageURL(imageURL string) error {
 }
 
 // convertToResponse converts analyzer result to service response
-func (s *imageAnalysisService) convertToResponse(imageURL string, result analyzer.AnalysisResult) *ImageAnalysisResponse {
-	return &ImageAnalysisResponse{
+func (s *imageAnalysisService) convertToResponse(imageURL string, result *models.AnalysisResult) *ImageAnalysisResponse {
+	response := &ImageAnalysisResponse{
 		ImageURL:          imageURL,
-		Timestamp:         result.Timestamp,
+		Timestamp:         result.Timestamp.Format("2006-01-02T15:04:05Z07:00"),
 		ProcessingTimeSec: result.ProcessingTimeSec,
 		Quality: Quality{
-			Overexposed:   result.Overexposed,
-			Oversaturated: result.Oversaturated,
-			IncorrectWB:   result.IncorrectWB,
-			Blurry:        result.Blurry,
+			Overexposed:   result.Quality.Overexposed,
+			Oversaturated: result.Quality.Oversaturated,
+			IncorrectWB:   result.Quality.IncorrectWB,
+			Blurry:        result.Quality.Blurry,
 			IsValid:       len(result.Errors) == 0,
 		},
 		Metrics: Metrics{
-			LaplacianVar:   result.LaplacianVar,
-			AvgLuminance:   result.AvgLuminance,
-			AvgSaturation:  result.AvgSaturation,
-			ChannelBalance: result.ChannelBalance,
+			LaplacianVar:   result.Metrics.LaplacianVar,
+			AvgLuminance:   result.Metrics.AvgLuminance,
+			AvgSaturation:  result.Metrics.AvgSaturation,
+			ChannelBalance: result.Metrics.ChannelBalance,
 		},
 		Errors: result.Errors,
 	}
+	
+	// Add OCR result if available
+	if result.OCRResult != nil {
+		response.OCRResult = &OCRResult{
+			ExtractedText: result.OCRResult.ExtractedText,
+			ExpectedText:  result.OCRResult.ExpectedText,
+			Confidence:    result.OCRResult.Confidence,
+			MatchScore:    result.OCRResult.MatchScore,
+		}
+	}
+	
+	return response
 }

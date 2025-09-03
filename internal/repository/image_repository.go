@@ -4,17 +4,20 @@ import (
 	"context"
 	"image"
 	"go-image-inspector/internal/storage"
+	"go-image-inspector/pkg/validation"
 )
 
 // HTTPImageRepository implements ImageRepository using HTTP storage
 type HTTPImageRepository struct {
-	fetcher storage.ImageFetcher
+	fetcher   storage.ImageFetcher
+	validator *validation.URLValidator
 }
 
 // NewHTTPImageRepository creates a new HTTP-based image repository
 func NewHTTPImageRepository(fetcher storage.ImageFetcher) ImageRepository {
 	return &HTTPImageRepository{
-		fetcher: fetcher,
+		fetcher:   fetcher,
+		validator: validation.NewURLValidator(),
 	}
 }
 
@@ -25,12 +28,7 @@ func (r *HTTPImageRepository) FetchImage(ctx context.Context, imageURL string) (
 
 // ValidateImageURL validates if the provided URL is acceptable
 func (r *HTTPImageRepository) ValidateImageURL(imageURL string) error {
-	// This would typically use a validator from the storage layer
-	// For now, we'll implement basic validation
-	if imageURL == "" {
-		return ErrInvalidImageURL
-	}
-	return nil
+	return r.validator.ValidateImageURL(imageURL)
 }
 
 // GetImageMetadata retrieves metadata about an image without downloading it
