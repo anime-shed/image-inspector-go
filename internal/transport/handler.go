@@ -43,8 +43,17 @@ func NewHandler(analysisService service.ImageAnalysisService, detailedService *s
 	r.GET("/health", healthCheck)
 	r.POST("/analyze", analyzeImage(analysisService, cfg))
 	r.POST("/analyze/options", analyzeImageWithOptions(analysisService, cfg))
-	r.POST("/detailed-analyze", detailedAnalyzeImage(detailedService, cfg))
-
+	if detailedService == nil {
+		logger.WithField("route", "/detailed-analyze").
+			Warn("DetailedAnalysisService is nil; route not registered")
+	} else {
+		if detailedService == nil {
+			logger.WithField("route", "/detailed-analyze").
+				Warn("DetailedAnalysisService is nil; route not registered")
+		} else {
+			r.POST("/detailed-analyze", detailedAnalyzeImage(detailedService, cfg))
+		}
+	}
 	return r
 }
 
@@ -241,7 +250,7 @@ func detailedAnalyzeImage(detailedService *services.DetailedAnalysisService, cfg
 		detailedReq := models.DetailedAnalysisRequest{
 			URL: req.URL,
 		}
-		
+
 		// Delegate to detailed service
 		response, err := detailedService.AnalyzeImageDetailed(detailedReq)
 		if err != nil {

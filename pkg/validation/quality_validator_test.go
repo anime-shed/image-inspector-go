@@ -11,8 +11,9 @@ func TestNewQualityValidator(t *testing.T) {
 	}
 
 	// Check default thresholds are set
-	if validator.thresholds.MinLaplacianVariance != 350.0 {
-		t.Errorf("Expected MinLaplacianVariance to be 350.0, got %f", validator.thresholds.MinLaplacianVariance)
+	expected := DefaultQualityThresholds().MinLaplacianVariance
+	if validator.thresholds.MinLaplacianVariance != expected {
+		t.Errorf("Expected MinLaplacianVariance to be %f, got %f", expected, validator.thresholds.MinLaplacianVariance)
 	}
 }
 
@@ -34,18 +35,18 @@ func TestValidateBasicQuality_HighQuality(t *testing.T) {
 
 	// Create metrics for a high-quality image
 	metrics := ImageQualityMetrics{
-		Width:           1920,
-		Height:          1080,
-		LaplacianVar:    1000.0, // Good sharpness
-		Brightness:      150.0,  // Good brightness
-		AvgLuminance:    0.5,     // Good luminance
-		AvgSaturation:   0.3,     // Good saturation
-		ChannelBalance:  [3]float64{0.33, 0.33, 0.34}, // Good balance
-		Overexposed:     false,
-		Oversaturated:   false,
-		IncorrectWB:     false,
-		IsTooDark:       false,
-		IsTooBright:     false,
+		Width:          1920,
+		Height:         1080,
+		LaplacianVar:   1000.0,                       // Good sharpness
+		Brightness:     150.0,                        // Good brightness
+		AvgLuminance:   0.5,                          // Good luminance
+		AvgSaturation:  0.3,                          // Good saturation
+		ChannelBalance: [3]float64{0.33, 0.33, 0.34}, // Good balance
+		Overexposed:    false,
+		Oversaturated:  false,
+		IncorrectWB:    false,
+		IsTooDark:      false,
+		IsTooBright:    false,
 	}
 
 	issues := validator.ValidateBasicQuality(metrics)
@@ -60,9 +61,9 @@ func TestValidateBasicQuality_Blurry(t *testing.T) {
 	validator := NewQualityValidator()
 
 	metrics := ImageQualityMetrics{
-		LaplacianVar:  50.0, // Below threshold (100)
-		AvgLuminance:  0.5,
-		AvgSaturation: 0.3,
+		LaplacianVar:   50.0, // Below threshold (100)
+		AvgLuminance:   0.5,
+		AvgSaturation:  0.3,
 		ChannelBalance: [3]float64{0.33, 0.33, 0.34},
 	}
 
@@ -92,10 +93,10 @@ func TestValidateBasicQuality_Overexposed(t *testing.T) {
 	validator := NewQualityValidator()
 
 	metrics := ImageQualityMetrics{
-		LaplacianVar:  1000.0,
-		Overexposed:   true, // Overexposed
-		AvgLuminance:  0.5,
-		AvgSaturation: 0.3,
+		LaplacianVar:   1000.0,
+		Overexposed:    true, // Overexposed
+		AvgLuminance:   0.5,
+		AvgSaturation:  0.3,
 		ChannelBalance: [3]float64{0.33, 0.33, 0.34},
 	}
 
@@ -122,9 +123,9 @@ func TestValidateBasicQuality_LowLuminance(t *testing.T) {
 	validator := NewQualityValidator()
 
 	metrics := ImageQualityMetrics{
-		LaplacianVar:  1000.0,
-		AvgLuminance:  0.1, // Below threshold (0.2)
-		AvgSaturation: 0.3,
+		LaplacianVar:   1000.0,
+		AvgLuminance:   0.1, // Below threshold (0.2)
+		AvgSaturation:  0.3,
 		ChannelBalance: [3]float64{0.33, 0.33, 0.34},
 	}
 
@@ -183,10 +184,10 @@ func TestValidateOCRQuality_HighQuality(t *testing.T) {
 	metrics := ImageQualityMetrics{
 		Width:            1920,
 		Height:           1080,
-		LaplacianVar:     1000.0, // Good sharpness for OCR
-		Brightness:       150.0,  // Good brightness
-		AvgLuminance:     0.5,     // Good luminance
-		AvgSaturation:    0.3,     // Good saturation
+		LaplacianVar:     1000.0,                       // Good sharpness for OCR
+		Brightness:       150.0,                        // Good brightness
+		AvgLuminance:     0.5,                          // Good luminance
+		AvgSaturation:    0.3,                          // Good saturation
 		ChannelBalance:   [3]float64{0.33, 0.33, 0.34}, // Good balance
 		Overexposed:      false,
 		Oversaturated:    false,

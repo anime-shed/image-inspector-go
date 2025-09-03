@@ -38,6 +38,11 @@ func WithFields(fields logrus.Fields) *logrus.Entry {
 	return Logger.WithFields(fields)
 }
 
+// WithField creates a new entry with a single field
+func WithField(key string, value interface{}) *logrus.Entry {
+	return Logger.WithField(key, value)
+}
+
 // WithError creates a new entry with an error field
 func WithError(err error) *logrus.Entry {
 	return Logger.WithError(err)

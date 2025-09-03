@@ -12,8 +12,8 @@ type WorkerPool struct {
 	wg         sync.WaitGroup
 	once       sync.Once
 	workerPool sync.Pool
-	mu         sync.Mutex
-	started    bool
+	mu         sync.RWMutex
+	closed     bool
 }
 
 // NewWorkerPool creates a new worker pool with the specified number of workers
@@ -36,9 +36,6 @@ func NewWorkerPool(workers int) *WorkerPool {
 // Start initializes and starts all workers in the pool
 func (wp *WorkerPool) Start() {
 	wp.once.Do(func() {
-		wp.mu.Lock()
-		wp.started = true
-		wp.mu.Unlock()
 		for i := 0; i < wp.workers; i++ {
 			go wp.worker()
 		}
@@ -48,23 +45,31 @@ func (wp *WorkerPool) Start() {
 // worker processes jobs from the job queue
 func (wp *WorkerPool) worker() {
 	for job := range wp.jobQueue {
-		job()
-		wp.wg.Done()
+		func() {
+			defer wp.wg.Done()
+			defer func() {
+				if recover() != nil {
+					// optionally log/report the panic here
+				}
+			}()
+			job()
+		}()
 	}
 }
 
-// Submit adds a job to the worker pool queue
-// Auto-starts the pool if not already started to prevent blocking
+// Submit adds a job to the worker pool
 func (wp *WorkerPool) Submit(job func()) {
-	wp.mu.Lock()
-	if !wp.started {
-		wp.started = true
-		wp.mu.Unlock()
-		wp.Start()
-	} else {
-		wp.mu.Unlock()
+	// Auto-start is idempotent due to once.Do inside Start()
+	wp.Start()
+	
+	wp.mu.RLock()
+	if wp.closed {
+		wp.mu.RUnlock()
+		return // No-op if pool is closed
 	}
 	wp.wg.Add(1)
+	wp.mu.RUnlock()
+	
 	wp.jobQueue <- job
 }
 
@@ -75,5 +80,13 @@ func (wp *WorkerPool) Wait() {
 
 // Close shuts down the worker pool
 func (wp *WorkerPool) Close() {
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+	
+	if wp.closed {
+		return // Already closed, idempotent
+	}
+	
+	wp.closed = true
 	close(wp.jobQueue)
 }

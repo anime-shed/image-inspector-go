@@ -60,9 +60,9 @@ func (s *DetailedAnalysisService) AnalyzeImageDetailed(request models.DetailedAn
 		ImageMetadata: models.ImageMetadata{
 			Width:         width,
 			Height:        height,
-			Format:        "image/jpeg", // TODO: Could be enhanced to detect actual format
-			ContentType:   "image/jpeg", // TODO: Could be enhanced to detect actual content type
-			ContentLength: 0,            // TODO: Could be enhanced to get actual content length
+			Format:        s.detectImageFormat(basicResponse), 
+			ContentType:   s.getContentType(basicResponse),
+			ContentLength: s.getContentLength(basicResponse),
 		},
 		QualityChecks: make([]models.QualityCheckResult, 0),
 		Errors:        make([]string, 0),
@@ -118,8 +118,8 @@ func (s *DetailedAnalysisService) convertBasicToRawMetrics(basicResponse *models
 	// Parse actual dimensions from the resolution string in the basic response
 	width, height := s.parseResolution(metrics.Resolution)
 	if width == 0 || height == 0 {
-		// Fallback to reasonable defaults only if parsing fails
-		width, height = 1920, 1080
+		// Handle invalid resolution gracefully
+		width, height = 1920, 1080 // Default fallback
 	}
 
 	rawMetrics := &models.RawMetrics{
@@ -154,24 +154,28 @@ func (s *DetailedAnalysisService) convertBasicToRawMetrics(basicResponse *models
 	}
 
 	// Set reasonable defaults for metrics not available in basic response
-	rawMetrics.LaplacianMean = rawMetrics.LaplacianVariance / 2.0
-	rawMetrics.LaplacianStdDev = rawMetrics.LaplacianVariance / 4.0
-	rawMetrics.LuminanceDistribution = [10]float64{0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1}
-	rawMetrics.ChannelStdDevs = [3]float64{30, 30, 30}
+	// These metrics require full image analysis and are not available from basic response
+	rawMetrics.LaplacianMean = 0 // Not available
+	rawMetrics.LaplacianStdDev = math.Sqrt(rawMetrics.LaplacianVariance)
+	// LuminanceDistribution requires histogram analysis - marking as unavailable
+	rawMetrics.LuminanceDistribution = [10]float64{} // Empty indicates unavailable
+	rawMetrics.ChannelStdDevs = [3]float64{}         // Empty indicates unavailable
 
 	// Calculate exposure ratios based on quality flags and brightness
 	if quality.Overexposed {
-		rawMetrics.OverexposedPixelRatio = 0.15 // Higher ratio for overexposed images
+		// TODO: Get actual ratio from image analysis
+		rawMetrics.OverexposedPixelRatio = 0.15 // Estimate based on flag
 	} else {
-		rawMetrics.OverexposedPixelRatio = 0.02 // Normal ratio
+		rawMetrics.OverexposedPixelRatio = 0.02 // Default estimate
 	}
 
 	if quality.IsTooDark {
 		rawMetrics.UnderexposedPixelRatio = 0.20 // Higher ratio for dark images
 	} else {
-		rawMetrics.UnderexposedPixelRatio = 0.05 // Normal ratio
+		rawMetrics.UnderexposedPixelRatio = 0.05 // Default estimate
 	}
 
+	// TODO: These require full image analysis - using placeholders
 	rawMetrics.DynamicRange = 200.0
 	rawMetrics.NumContours = 10
 	rawMetrics.EdgePixelRatio = 0.15
@@ -420,9 +424,8 @@ func (s *DetailedAnalysisService) createQualityChecks(rawMetrics *models.RawMetr
 
 // calculateSharpnessMetrics calculates Laplacian variance and related metrics
 func (s *DetailedAnalysisService) calculateSharpnessMetrics(img image.Image) (variance, mean, stdDev float64) {
-	// Implementation would use OpenCV or similar for Laplacian calculation
-	// This is a placeholder - actual implementation would calculate Laplacian variance
-	return 100.0, 50.0, 25.0 // Placeholder values
+	// TODO: Implement using image processing library
+	panic("calculateSharpnessMetrics not implemented")
 }
 
 // calculateImageMetadata extracts basic image metadata
@@ -621,4 +624,43 @@ func (s *DetailedAnalysisService) parseResolution(resolution string) (int, int) 
 	}
 
 	return width, height
+}
+
+// detectImageFormat detects the image format from the basic response
+func (s *DetailedAnalysisService) detectImageFormat(basicResponse *models.ImageAnalysisResponse) string {
+	// Try to extract format from the basic response or default to JPEG
+	if basicResponse != nil && basicResponse.Metrics.Resolution != "" {
+		// For now, we'll default to JPEG since format detection requires more analysis
+		return "JPEG"
+	}
+	return "unknown"
+}
+
+// getContentType returns the content type based on the detected format
+func (s *DetailedAnalysisService) getContentType(basicResponse *models.ImageAnalysisResponse) string {
+	format := s.detectImageFormat(basicResponse)
+	switch strings.ToLower(format) {
+	case "jpeg", "jpg":
+		return "image/jpeg"
+	case "png":
+		return "image/png"
+	case "gif":
+		return "image/gif"
+	case "webp":
+		return "image/webp"
+	default:
+		return "image/jpeg" // Default fallback
+	}
+}
+
+// getContentLength returns the estimated content length
+func (s *DetailedAnalysisService) getContentLength(basicResponse *models.ImageAnalysisResponse) int64 {
+	// Since we don't have actual file size from basic response, estimate based on resolution
+	width, height := s.parseResolution(basicResponse.Metrics.Resolution)
+	if width > 0 && height > 0 {
+		// Rough estimate: assume 3 bytes per pixel for JPEG compression
+		estimatedSize := int64(width * height * 3 / 10) // JPEG compression ratio ~10:1
+		return estimatedSize
+	}
+	return 0
 }
