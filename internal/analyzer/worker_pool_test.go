@@ -169,11 +169,11 @@ func TestWorkerPool_AtomicCounters(t *testing.T) {
 	stats := pool.GetStats()
 
 	// Verify counters
-	if stats.TotalJobs != numJobs {
+	if stats.TotalJobs != int64(numJobs) {
 		t.Errorf("Expected %d total jobs, got %d", numJobs, stats.TotalJobs)
 	}
 
-	if stats.CompletedJobs != numJobs {
+	if stats.CompletedJobs != int64(numJobs) {
 		t.Errorf("Expected %d completed jobs, got %d", numJobs, stats.CompletedJobs)
 	}
 

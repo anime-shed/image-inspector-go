@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
-	"go-image-inspector/internal/analyzer"
-	apperrors "go-image-inspector/internal/errors"
-	"go-image-inspector/internal/repository"
-	"go-image-inspector/pkg/models"
+	"github.com/anime-shed/image-inspector-go/internal/analyzer"
+	apperrors "github.com/anime-shed/image-inspector-go/internal/errors"
+	"github.com/anime-shed/image-inspector-go/internal/repository"
+	"github.com/anime-shed/image-inspector-go/pkg/models"
 	"image"
 	"strings"
 )

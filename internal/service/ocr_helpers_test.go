@@ -2,8 +2,7 @@ package service
 
 import (
 	"testing"
-
-	"go-image-inspector/pkg/models"
+	"github.com/anime-shed/image-inspector-go/pkg/models"
 )
 
 func TestComputeOCRReadiness(t *testing.T) {

@@ -1,6 +1,6 @@
-module go-image-inspector
+module github.com/anime-shed/image-inspector-go
 
-go 1.23.5
+go 1.23.0
 
 require (
 	github.com/gin-gonic/gin v1.10.1

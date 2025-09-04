@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"go-image-inspector/internal/config"
-	"go-image-inspector/internal/container"
+	"github.com/anime-shed/image-inspector-go/internal/config"
+	"github.com/anime-shed/image-inspector-go/internal/container"
 
 	"github.com/sirupsen/logrus"
 )

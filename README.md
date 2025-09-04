@@ -93,14 +93,13 @@ The application can be configured using environment variables. The following var
 
 ### Detailed Analysis (New)
 - `POST /detailed-analyze`: Comprehensive image analysis with detailed metrics and thresholds:
-   - `url`: The URL of the image to be analyzed.
-   - `analysis_mode`: (optional) Analysis mode - "basic", "ocr", or "comprehensive" (default: "comprehensive").
-   - `include_performance`: (optional) Include performance metrics in response.
-   - `include_raw_metrics`: (optional) Include raw calculation metrics.
-   - `custom_thresholds`: (optional) Override default quality thresholds.
-   - `feature_flags`: (optional) Enable/disable specific analysis features.
-   - `expected_text`: (optional) Expected text for OCR validation.
-
+  - `url`: The URL of the image to be analyzed.
+  - `analysis_mode`: (optional) "basic" | "ocr" | "comprehensive" (default: "comprehensive")
+  - `include_performance`: (optional) boolean
+  - `include_raw_metrics`: (optional) boolean
+  - `custom_thresholds`: (optional) object
+  - `feature_flags`: (optional) object of booleans
+  - `expected_text`: (optional) string (used only when `analysis_mode="ocr"`)
 ## Usage Examples
 
 ### Basic Image Analysis

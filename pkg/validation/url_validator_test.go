@@ -2,7 +2,7 @@ package validation
 
 import (
 	"testing"
-	apperrors "go-image-inspector/internal/errors"
+	apperrors "github.com/anime-shed/image-inspector-go/internal/errors"
 )
 
 func TestNewURLValidator(t *testing.T) {

@@ -6,26 +6,18 @@ import (
 	"runtime"
 	"sync"
 
-	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat"
 )
 
 // metricsCalculator implements MetricsCalculator interface with Gonum optimizations
 // Implements optimizations from PERFORMANCE_OPTIMIZATION_ANALYSIS.md Phase 2
 type metricsCalculator struct {
-	// Memory pools for efficient matrix operations
-	matrixPool sync.Pool
 	slicePool  sync.Pool
 }
 
 // NewMetricsCalculator creates a new metrics calculator using Gonum
 func NewMetricsCalculator() MetricsCalculator {
 	return &metricsCalculator{
-		matrixPool: sync.Pool{
-			New: func() interface{} {
-				return mat.NewDense(3, 3, nil)
-			},
-		},
 		slicePool: sync.Pool{
 			New: func() interface{} {
 				return make([]float64, 0, 1024)
@@ -38,15 +30,21 @@ func NewMetricsCalculator() MetricsCalculator {
 func (omc *metricsCalculator) CalculateBasicMetrics(img image.Image) metrics {
 	bounds := img.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
-	_ = width * height // Suppress unused variable warning
+	
+	// Handle empty images
+	if width == 0 || height == 0 {
+		return metrics{}
+	}
 
 	// Use parallel processing for better performance
 	numWorkers := runtime.NumCPU()
-	rowsPerWorker := height / numWorkers
-	if rowsPerWorker == 0 {
-		rowsPerWorker = 1
+	if height < numWorkers {
 		numWorkers = height
+		if numWorkers == 0 {
+			numWorkers = 1
+		}
 	}
+	rowsPerWorker := (height + numWorkers - 1) / numWorkers // ceil division
 
 	type regionResult struct {
 		lum, sat, r, g, b float64
@@ -59,6 +57,11 @@ func (omc *metricsCalculator) CalculateBasicMetrics(img image.Image) metrics {
 	// Process image in horizontal strips for better cache locality
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
+		startY := bounds.Min.Y + i*rowsPerWorker
+		endY := startY + rowsPerWorker
+		if i == numWorkers-1 || endY > bounds.Max.Y {
+			endY = bounds.Max.Y
+		}
 		go func(startY, endY int) {
 			defer wg.Done()
 
@@ -84,7 +87,7 @@ func (omc *metricsCalculator) CalculateBasicMetrics(img image.Image) metrics {
 			}
 
 			results <- regionResult{lum, sat, r, g, b, pixelCount}
-		}(bounds.Min.Y+i*rowsPerWorker, bounds.Min.Y+(i+1)*rowsPerWorker)
+		}(startY, endY)
 	}
 
 	go func() {
@@ -103,6 +106,11 @@ func (omc *metricsCalculator) CalculateBasicMetrics(img image.Image) metrics {
 		totalG += result.g
 		totalB += result.b
 		totalPixelCount += result.pixelCount
+	}
+
+	// Handle case where no pixels were processed
+	if totalPixelCount == 0 {
+		return metrics{}
 	}
 
 	pixelCount := float64(totalPixelCount)
@@ -155,6 +163,11 @@ func (omc *metricsCalculator) CalculateLaplacianVariance(gray *image.Gray) float
 func (omc *metricsCalculator) CalculateBrightness(gray *image.Gray) float64 {
 	bounds := gray.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
+	
+	// Handle empty images
+	if width == 0 || height == 0 {
+		return 0
+	}
 
 	// Use parallel processing for large images
 	if width*height < 100000 {
@@ -163,17 +176,24 @@ func (omc *metricsCalculator) CalculateBrightness(gray *image.Gray) float64 {
 	}
 
 	numWorkers := runtime.NumCPU()
-	rowsPerWorker := height / numWorkers
-	if rowsPerWorker == 0 {
-		rowsPerWorker = 1
+	if height < numWorkers {
 		numWorkers = height
 	}
+	if numWorkers <= 0 {
+		numWorkers = 1
+	}
+	rowsPerWorker := (height + numWorkers - 1) / numWorkers // ceil division
 
 	results := make(chan float64, numWorkers)
 	var wg sync.WaitGroup
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
+		startY := bounds.Min.Y + i*rowsPerWorker
+		endY := startY + rowsPerWorker
+		if i == numWorkers-1 || endY > bounds.Max.Y {
+			endY = bounds.Max.Y
+		}
 		go func(startY, endY int) {
 			defer wg.Done()
 
@@ -184,7 +204,7 @@ func (omc *metricsCalculator) CalculateBrightness(gray *image.Gray) float64 {
 				}
 			}
 			results <- totalBrightness
-		}(bounds.Min.Y+i*rowsPerWorker, bounds.Min.Y+(i+1)*rowsPerWorker)
+		}(startY, endY)
 	}
 
 	go func() {

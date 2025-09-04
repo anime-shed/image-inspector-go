@@ -3,13 +3,13 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/anime-shed/image-inspector-go/internal/storage"
+	"github.com/anime-shed/image-inspector-go/pkg/validation"
 	"image"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-	"go-image-inspector/internal/storage"
-	"go-image-inspector/pkg/validation"
 )
 
 // HTTPImageRepository implements ImageRepository using HTTP storage

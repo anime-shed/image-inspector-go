@@ -69,17 +69,14 @@ func (owp *WorkerPool) Start() {
 
 // worker processes jobs with enhanced error handling and performance monitoring
 func (owp *WorkerPool) worker(workerID int) {
-	// Set goroutine to be more likely to stay on the same OS thread
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
+	// Let the scheduler manage OS threads; no affinity required
 	for job := range owp.jobQueue {
+		// Process the job
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
 					// Enhanced panic recovery with logging capability
 					// In production, this would log the panic details
-					owp.incrementCompletedJobs()
 				}
 			}()
 
@@ -89,7 +86,7 @@ func (owp *WorkerPool) worker(workerID int) {
 			owp.decrementActiveWorkers()
 			owp.incrementCompletedJobs()
 		}()
-
+		
 		// Signal job completion
 		owp.wg.Done()
 	}
@@ -100,11 +97,10 @@ func (owp *WorkerPool) Submit(job func()) bool {
 	owp.Start() // Auto-start is idempotent
 
 	owp.mu.RLock()
+	defer owp.mu.RUnlock()
 	if owp.closed {
-		owp.mu.RUnlock()
 		return false // Return false if pool is closed
 	}
-	owp.mu.RUnlock()
 
 	// Non-blocking submit with timeout
 	select {
@@ -123,19 +119,21 @@ func (owp *WorkerPool) SubmitWithTimeout(job func(), timeout time.Duration) bool
 	owp.Start()
 
 	owp.mu.RLock()
+	defer owp.mu.RUnlock()
 	if owp.closed {
-		owp.mu.RUnlock()
 		return false
 	}
-	owp.mu.RUnlock()
-
+	
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	
 	select {
 	case owp.jobQueue <- job:
 		// Only increment counters after successful submission
 		owp.wg.Add(1)
 		owp.incrementTotalJobs()
 		return true
-	case <-time.After(timeout):
+	case <-timer.C:
 		return false
 	}
 }
@@ -181,7 +179,10 @@ func (owp *WorkerPool) GetBuffer() []byte {
 
 // PutBuffer returns a byte buffer to the pool
 func (owp *WorkerPool) PutBuffer(buf []byte) {
-	owp.bufferPool.Put(buf[:0]) // Reset length but keep capacity
+	const maxBufCap = 1 << 20 // 1MB
+	if cap(buf) <= maxBufCap {
+		owp.bufferPool.Put(buf[:0]) // Reset length but keep capacity
+	}
 }
 
 // GetSlice retrieves a reusable float64 slice from the pool
@@ -191,7 +192,10 @@ func (owp *WorkerPool) GetSlice() []float64 {
 
 // PutSlice returns a float64 slice to the pool
 func (owp *WorkerPool) PutSlice(slice []float64) {
-	owp.slicePool.Put(slice[:0]) // Reset length but keep capacity
+	const maxSliceCap = 1 << 15 // 32K
+	if cap(slice) <= maxSliceCap {
+		owp.slicePool.Put(slice[:0]) // Reset length but keep capacity
+	}
 }
 
 // GetMatrix retrieves a reusable matrix from the pool
@@ -201,7 +205,10 @@ func (owp *WorkerPool) GetMatrix() [][]float64 {
 
 // PutMatrix returns a matrix to the pool
 func (owp *WorkerPool) PutMatrix(matrix [][]float64) {
-	owp.matrixPool.Put(matrix[:0]) // Reset length but keep capacity
+	const maxRows = 1024
+	if cap(matrix) <= maxRows {
+		owp.matrixPool.Put(matrix[:0]) // Reset length but keep capacity
+	}
 }
 
 // Performance monitoring methods

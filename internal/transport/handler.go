@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"time"
 
-	"go-image-inspector/internal/analyzer"
-	"go-image-inspector/internal/config"
-	apperrors "go-image-inspector/internal/errors"
-	"go-image-inspector/internal/logger"
-	"go-image-inspector/internal/service"
-	"go-image-inspector/pkg/models"
+	"github.com/anime-shed/image-inspector-go/internal/analyzer"
+	"github.com/anime-shed/image-inspector-go/internal/config"
+	apperrors "github.com/anime-shed/image-inspector-go/internal/errors"
+	"github.com/anime-shed/image-inspector-go/internal/logger"
+	"github.com/anime-shed/image-inspector-go/internal/service"
+	"github.com/anime-shed/image-inspector-go/pkg/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -289,8 +289,12 @@ func errorHandler() gin.HandlerFunc {
 		c.Next()
 
 		if len(c.Errors) > 0 {
-			err := c.Errors.Last()
-			respondError(c, determineStatusCode(err), "request processing failed", err)
+			ge := c.Errors.Last()
+			baseErr := ge.Err
+			if baseErr == nil {
+				baseErr = ge // fallback
+			}
+			respondError(c, determineStatusCode(baseErr), "request processing failed", baseErr)
 		}
 	}
 }

@@ -3,7 +3,7 @@ package validation
 import (
 	"net/url"
 	"strings"
-	apperrors "go-image-inspector/internal/errors"
+	apperrors "github.com/anime-shed/image-inspector-go/internal/errors"
 )
 
 // URLValidator handles URL validation logic

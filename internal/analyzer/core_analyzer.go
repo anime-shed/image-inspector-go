@@ -2,8 +2,8 @@ package analyzer
 
 import (
 	"fmt"
-	"go-image-inspector/pkg/models"
-	"go-image-inspector/pkg/validation"
+	"github.com/anime-shed/image-inspector-go/pkg/models"
+	"github.com/anime-shed/image-inspector-go/pkg/validation"
 	"image"
 	"image/draw"
 	"strconv"

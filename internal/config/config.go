@@ -1,9 +1,10 @@
 package config
 
 import (
-	"fmt"
+	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -17,7 +18,10 @@ type Config struct {
 }
 
 func (c *Config) ServerAddress() string {
-	return fmt.Sprintf("%s:%s", c.Host, c.Port)
+	// Trim any whitespace from host and port
+	host := strings.TrimSpace(c.Host)
+	port := strings.TrimSpace(c.Port)
+	return net.JoinHostPort(host, port)
 }
 
 func LoadFromEnv() (*Config, error) {

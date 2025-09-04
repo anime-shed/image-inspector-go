@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
+	"github.com/anime-shed/image-inspector-go/pkg/models"
 	"image"
-	"go-image-inspector/pkg/models"
 )
 
 // ImageRepository defines the interface for image data access operations

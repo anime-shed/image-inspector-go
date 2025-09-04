@@ -1,12 +1,12 @@
 package container
 
 import (
-	"go-image-inspector/internal/analyzer"
-	"go-image-inspector/internal/config"
-	"go-image-inspector/internal/repository"
-	"go-image-inspector/internal/service"
-	"go-image-inspector/internal/storage"
-	"go-image-inspector/internal/transport"
+	"github.com/anime-shed/image-inspector-go/internal/analyzer"
+	"github.com/anime-shed/image-inspector-go/internal/config"
+	"github.com/anime-shed/image-inspector-go/internal/repository"
+	"github.com/anime-shed/image-inspector-go/internal/service"
+	"github.com/anime-shed/image-inspector-go/internal/storage"
+	"github.com/anime-shed/image-inspector-go/internal/transport"
 	"net/http"
 )
 
