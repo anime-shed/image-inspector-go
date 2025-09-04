@@ -3,24 +3,25 @@ package analyzer
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // WorkerPool manages concurrent task execution with enhanced performance
 // Implements optimizations from PERFORMANCE_OPTIMIZATION_ANALYSIS.md Phase 3
 type WorkerPool struct {
-	workers     int
-	jobQueue    chan func()
-	wg          sync.WaitGroup
-	once        sync.Once
-	mu          sync.RWMutex
-	closed      bool
-	
+	workers  int
+	jobQueue chan func()
+	wg       sync.WaitGroup
+	once     sync.Once
+	mu       sync.RWMutex
+	closed   bool
+
 	// Enhanced memory pools for different data types
-	bufferPool  sync.Pool // For temporary byte slices
-	slicePool   sync.Pool // For temporary float64 slices
-	matrixPool  sync.Pool // For temporary matrix data
-	
+	bufferPool sync.Pool // For temporary byte slices
+	slicePool  sync.Pool // For temporary float64 slices
+	matrixPool sync.Pool // For temporary matrix data
+
 	// Performance monitoring
 	activeWorkers int64
 	totalJobs     int64
@@ -36,7 +37,7 @@ func NewWorkerPool(workers int) *WorkerPool {
 	return &WorkerPool{
 		workers:  workers,
 		jobQueue: make(chan func(), workers*4), // Increased buffer for better throughput
-		
+
 		// Initialize memory pools with appropriate sizes
 		bufferPool: sync.Pool{
 			New: func() interface{} {
@@ -56,8 +57,6 @@ func NewWorkerPool(workers int) *WorkerPool {
 	}
 }
 
-
-
 // Start initializes and starts all workers in the pool with goroutine management
 func (owp *WorkerPool) Start() {
 	owp.once.Do(func() {
@@ -73,10 +72,9 @@ func (owp *WorkerPool) worker(workerID int) {
 	// Set goroutine to be more likely to stay on the same OS thread
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	
+
 	for job := range owp.jobQueue {
 		func() {
-			defer owp.wg.Done()
 			defer func() {
 				if r := recover(); r != nil {
 					// Enhanced panic recovery with logging capability
@@ -84,36 +82,38 @@ func (owp *WorkerPool) worker(workerID int) {
 					owp.incrementCompletedJobs()
 				}
 			}()
-			
+
 			// Execute the job
 			owp.incrementActiveWorkers()
 			job()
 			owp.decrementActiveWorkers()
 			owp.incrementCompletedJobs()
 		}()
+
+		// Signal job completion
+		owp.wg.Done()
 	}
 }
 
 // Submit adds a job to the worker pool with queuing
 func (owp *WorkerPool) Submit(job func()) bool {
 	owp.Start() // Auto-start is idempotent
-	
+
 	owp.mu.RLock()
 	if owp.closed {
 		owp.mu.RUnlock()
 		return false // Return false if pool is closed
 	}
 	owp.mu.RUnlock()
-	
-	owp.wg.Add(1)
-	owp.incrementTotalJobs()
-	
+
 	// Non-blocking submit with timeout
 	select {
 	case owp.jobQueue <- job:
+		// Only increment counters after successful submission
+		owp.wg.Add(1)
+		owp.incrementTotalJobs()
 		return true
 	case <-time.After(100 * time.Millisecond):
-		owp.wg.Done()
 		return false // Job rejected due to full queue
 	}
 }
@@ -121,22 +121,21 @@ func (owp *WorkerPool) Submit(job func()) bool {
 // SubmitWithTimeout adds a job with a custom timeout
 func (owp *WorkerPool) SubmitWithTimeout(job func(), timeout time.Duration) bool {
 	owp.Start()
-	
+
 	owp.mu.RLock()
 	if owp.closed {
 		owp.mu.RUnlock()
 		return false
 	}
 	owp.mu.RUnlock()
-	
-	owp.wg.Add(1)
-	owp.incrementTotalJobs()
-	
+
 	select {
 	case owp.jobQueue <- job:
+		// Only increment counters after successful submission
+		owp.wg.Add(1)
+		owp.incrementTotalJobs()
 		return true
 	case <-time.After(timeout):
-		owp.wg.Done()
 		return false
 	}
 }
@@ -153,7 +152,7 @@ func (owp *WorkerPool) WaitWithTimeout(timeout time.Duration) bool {
 		owp.wg.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		return true
@@ -166,11 +165,11 @@ func (owp *WorkerPool) WaitWithTimeout(timeout time.Duration) bool {
 func (owp *WorkerPool) Close() {
 	owp.mu.Lock()
 	defer owp.mu.Unlock()
-	
+
 	if owp.closed {
 		return
 	}
-	
+
 	owp.closed = true
 	close(owp.jobQueue)
 }
@@ -207,20 +206,19 @@ func (owp *WorkerPool) PutMatrix(matrix [][]float64) {
 
 // Performance monitoring methods
 func (owp *WorkerPool) incrementActiveWorkers() {
-	// In a real implementation, this would use atomic operations
-	// For simplicity, we'll skip the atomic operations here
+	atomic.AddInt64(&owp.activeWorkers, 1)
 }
 
 func (owp *WorkerPool) decrementActiveWorkers() {
-	// In a real implementation, this would use atomic operations
+	atomic.AddInt64(&owp.activeWorkers, -1)
 }
 
 func (owp *WorkerPool) incrementTotalJobs() {
-	// In a real implementation, this would use atomic operations
+	atomic.AddInt64(&owp.totalJobs, 1)
 }
 
 func (owp *WorkerPool) incrementCompletedJobs() {
-	// In a real implementation, this would use atomic operations
+	atomic.AddInt64(&owp.completedJobs, 1)
 }
 
 // Stats returns performance statistics
@@ -236,12 +234,12 @@ type WorkerPoolStats struct {
 func (owp *WorkerPool) GetStats() WorkerPoolStats {
 	owp.mu.RLock()
 	defer owp.mu.RUnlock()
-	
+
 	return WorkerPoolStats{
 		Workers:       owp.workers,
-		ActiveWorkers: owp.activeWorkers,
-		TotalJobs:     owp.totalJobs,
-		CompletedJobs: owp.completedJobs,
+		ActiveWorkers: atomic.LoadInt64(&owp.activeWorkers),
+		TotalJobs:     atomic.LoadInt64(&owp.totalJobs),
+		CompletedJobs: atomic.LoadInt64(&owp.completedJobs),
 		QueueLength:   len(owp.jobQueue),
 	}
 }
@@ -251,14 +249,14 @@ func (owp *WorkerPool) Resize(newWorkerCount int) {
 	if newWorkerCount <= 0 {
 		newWorkerCount = runtime.NumCPU()
 	}
-	
+
 	owp.mu.Lock()
 	defer owp.mu.Unlock()
-	
+
 	if owp.closed {
 		return
 	}
-	
+
 	// For simplicity, we'll just update the worker count
 	// In a full implementation, this would actually start/stop workers
 	owp.workers = newWorkerCount

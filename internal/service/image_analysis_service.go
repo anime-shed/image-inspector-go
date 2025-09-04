@@ -2,12 +2,12 @@ package service
 
 import (
 	"context"
-	"image"
-	"strings"
 	"go-image-inspector/internal/analyzer"
 	apperrors "go-image-inspector/internal/errors"
 	"go-image-inspector/internal/repository"
 	"go-image-inspector/pkg/models"
+	"image"
+	"strings"
 )
 
 // ImageAnalysisService defines the interface for both basic and detailed image analysis
@@ -97,7 +97,7 @@ func (s *imageAnalysisService) AnalyzeImageDetailed(ctx context.Context, request
 	result := s.analyzer.AnalyzeWithOptions(img, options)
 
 	// Convert to detailed response
-	response := s.convertToDetailedResponse(request.URL, &result, img)
+	response := s.convertToDetailedResponse(ctx, request.URL, &result, img)
 
 	return response, nil
 }
@@ -172,12 +172,12 @@ func (s *imageAnalysisService) convertToBasicResponse(imageURL string, result *m
 }
 
 // convertToDetailedResponse converts analyzer result to detailed service response
-func (s *imageAnalysisService) convertToDetailedResponse(imageURL string, result *models.AnalysisResult, img interface{}) *models.DetailedAnalysisResponse {
+func (s *imageAnalysisService) convertToDetailedResponse(ctx context.Context, imageURL string, result *models.AnalysisResult, img interface{}) *models.DetailedAnalysisResponse {
 	// Extract image dimensions
 	width, height := s.getImageDimensions(img)
 
 	// Get image metadata (content length, format, etc.)
-	metadata, err := s.imageRepo.GetImageMetadata(context.Background(), imageURL)
+	metadata, err := s.imageRepo.GetImageMetadata(ctx, imageURL)
 	if err != nil {
 		// Fallback to defaults if metadata fetch fails
 		metadata = &models.ImageMetadata{
@@ -245,11 +245,11 @@ func (s *imageAnalysisService) convertToDetailedResponse(imageURL string, result
 	// Add OCR analysis if available
 	if result.OCRResult != nil {
 		response.OCRAnalysis = &models.DetailedOCRAnalysis{
-			OCRReadinessScore:  85.0, // Could be calculated based on quality metrics
-			TextDetectionScore: 90.0,
+			OCRReadinessScore:  s.computeOCRReadiness(result, width, height),
+			TextDetectionScore: s.computeTextDetectionScore(result.OCRResult),
 			DocumentType:       "text",
-			TextDensity:        0.3,
-			EstimatedTextLines: 10,
+			TextDensity:        s.computeTextDensity(result.OCRResult, width, height),
+			EstimatedTextLines: s.estimateTextLines(result.OCRResult),
 		}
 	}
 
@@ -342,17 +342,17 @@ func (s *imageAnalysisService) calculateColorScore(result *models.AnalysisResult
 
 func (s *imageAnalysisService) calculateOCRReadiness(result *models.AnalysisResult) bool {
 	// OCR ready if not blurry, not too dark/bright, not skewed, and has good resolution
-	return !result.Quality.Blurry && 
-		!result.Quality.IsTooDark && 
-		!result.Quality.IsTooBright && 
-		!result.Quality.IsSkewed && 
+	return !result.Quality.Blurry &&
+		!result.Quality.IsTooDark &&
+		!result.Quality.IsTooBright &&
+		!result.Quality.IsSkewed &&
 		!result.Quality.IsLowResolution
 }
 
 func (s *imageAnalysisService) hasCriticalIssues(result *models.AnalysisResult) bool {
 	// Critical issues that make image unusable
-	return result.Quality.Blurry || 
-		result.Quality.Overexposed || 
+	return result.Quality.Blurry ||
+		result.Quality.Overexposed ||
 		result.Quality.IsLowResolution
 }
 
@@ -411,4 +411,160 @@ func (s *imageAnalysisService) generateOverallAssessment(result *models.Analysis
 		UsabilityScore: qualityScore,
 		SuitableFor:    []string{"web", "display"},
 	}
+}
+
+// OCR Analysis Helper Functions
+
+// computeOCRReadiness calculates OCR readiness score based on quality metrics
+func (s *imageAnalysisService) computeOCRReadiness(result *models.AnalysisResult, width, height int) float64 {
+	score := 100.0
+
+	// Penalize for blur (most critical for OCR)
+	if result.Quality.Blurry {
+		score -= 40.0
+	} else if result.Metrics.LaplacianVar < 500.0 {
+		// Partial penalty for low sharpness
+		score -= (500.0 - result.Metrics.LaplacianVar) / 500.0 * 20.0
+	}
+
+	// Penalize for brightness issues
+	if result.Quality.IsTooDark {
+		score -= 25.0
+	} else if result.Quality.IsTooBright {
+		score -= 20.0
+	}
+
+	// Penalize for low resolution
+	if result.Quality.IsLowResolution {
+		score -= 30.0
+	} else if width*height < 1200000 { // Less than 1.2MP
+		score -= 15.0
+	}
+
+	// Penalize for skew
+	if result.Quality.IsSkewed {
+		score -= 15.0
+	}
+
+	// Penalize for exposure issues
+	if result.Quality.Overexposed {
+		score -= 20.0
+	}
+
+	// Penalize for color issues
+	if result.Quality.Oversaturated {
+		score -= 10.0
+	}
+	if result.Quality.IncorrectWB {
+		score -= 10.0
+	}
+
+	// Ensure score is within bounds
+	if score < 0 {
+		score = 0
+	}
+	if score > 100 {
+		score = 100
+	}
+
+	return score
+}
+
+// computeTextDetectionScore calculates text detection score based on OCR confidence
+func (s *imageAnalysisService) computeTextDetectionScore(ocrResult *models.OCRResult) float64 {
+	if ocrResult == nil {
+		return 0.0
+	}
+
+	// Base score on OCR confidence
+	score := ocrResult.Confidence
+
+	// Boost score if text was actually extracted
+	if len(ocrResult.ExtractedText) > 0 {
+		score += 10.0
+	}
+
+	// Boost score based on text length (more text = better detection)
+	textLength := len(ocrResult.ExtractedText)
+	if textLength > 100 {
+		score += 15.0
+	} else if textLength > 50 {
+		score += 10.0
+	} else if textLength > 10 {
+		score += 5.0
+	}
+
+	// Penalize for high error rates
+	if ocrResult.WER > 0.5 {
+		score -= 20.0
+	} else if ocrResult.WER > 0.3 {
+		score -= 10.0
+	}
+
+	if ocrResult.CER > 0.3 {
+		score -= 15.0
+	} else if ocrResult.CER > 0.2 {
+		score -= 8.0
+	}
+
+	// Ensure score is within bounds
+	if score < 0 {
+		score = 0
+	}
+	if score > 100 {
+		score = 100
+	}
+
+	return score
+}
+
+// computeTextDensity estimates text density based on extracted text and image dimensions
+func (s *imageAnalysisService) computeTextDensity(ocrResult *models.OCRResult, width, height int) float64 {
+	if ocrResult == nil || len(ocrResult.ExtractedText) == 0 {
+		return 0.0
+	}
+
+	// Calculate approximate text coverage
+	// Assume average character takes about 12x16 pixels
+	charPixels := 12 * 16
+	totalTextPixels := len(ocrResult.ExtractedText) * charPixels
+	totalImagePixels := width * height
+
+	density := float64(totalTextPixels) / float64(totalImagePixels)
+
+	// Cap density at reasonable maximum (0.8 for very dense text documents)
+	if density > 0.8 {
+		density = 0.8
+	}
+
+	return density
+}
+
+// estimateTextLines estimates number of text lines based on OCR text content
+func (s *imageAnalysisService) estimateTextLines(ocrResult *models.OCRResult) int {
+	if ocrResult == nil || len(ocrResult.ExtractedText) == 0 {
+		return 0
+	}
+
+	text := ocrResult.ExtractedText
+
+	// Count explicit newlines
+	lines := 1
+	for _, char := range text {
+		if char == '\n' {
+			lines++
+		}
+	}
+
+	// If no newlines found, estimate based on text length
+	if lines == 1 && len(text) > 0 {
+		// Assume average line has about 60-80 characters
+		avgCharsPerLine := 70
+		estimatedLines := len(text) / avgCharsPerLine
+		if estimatedLines > 1 {
+			lines = estimatedLines
+		}
+	}
+
+	return lines
 }

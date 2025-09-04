@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"go-image-inspector/internal/analyzer"
+	"go-image-inspector/internal/config"
 	apperrors "go-image-inspector/internal/errors"
 	"go-image-inspector/internal/logger"
 	"go-image-inspector/internal/service"
-	"go-image-inspector/internal/config"
 	"go-image-inspector/pkg/models"
 
 	"github.com/gin-gonic/gin"
@@ -107,15 +107,17 @@ func analyzeImage(analysisService service.ImageAnalysisService, cfg *config.Conf
 
 		// Log successful completion
 		duration := time.Since(startTime)
-		logger.WithFields(logrus.Fields{
+		fields := logrus.Fields{
 			"url":                req.URL,
 			"is_ocr":             req.IsOCR,
 			"processing_time_ms": duration.Milliseconds(),
-			"overexposed":        response.Quality.Overexposed,
-			"oversaturated":      response.Quality.Oversaturated,
-			"blurry":             response.Quality.Blurry,
-		}).Info("Image analysis completed successfully")
-
+		}
+		if response != nil {
+			fields["overexposed"] = response.Quality.Overexposed
+			fields["oversaturated"] = response.Quality.Oversaturated
+			fields["blurry"] = response.Quality.Blurry
+		}
+		logger.WithFields(fields).Info("Image analysis completed successfully")
 		c.JSON(http.StatusOK, response)
 	}
 }

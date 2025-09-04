@@ -107,6 +107,11 @@ func (oca *coreAnalyzer) AnalyzeWithOptions(img image.Image, options AnalysisOpt
 	// Grayscale conversion with memory reuse
 	bounds := img.Bounds()
 	gray := oca.getGrayImage(bounds)
+	if gray == nil {
+		finalResult := *result
+		finalResult.Errors = append(finalResult.Errors, "Failed to allocate grayscale image")
+		return finalResult
+	}
 	defer oca.grayPool.Put(gray)
 
 	draw.Draw(gray, bounds, img, bounds.Min, draw.Src)
@@ -299,7 +304,7 @@ func (oca *coreAnalyzer) performQualityValidation(result *AnalysisResult, option
 	// Prepare metrics for validation
 	width := oca.getWidthFromResolution(result.Metrics.Resolution)
 	height := oca.getHeightFromResolution(result.Metrics.Resolution)
-	
+
 	metrics := validation.ImageQualityMetrics{
 		Width:            width,
 		Height:           height,
@@ -351,10 +356,10 @@ func (oca *coreAnalyzer) finalizeAnalysisResults(result *AnalysisResult, options
 		result.Quality.Overexposed ||
 		result.Quality.Oversaturated ||
 		(options.OCRMode && (result.Quality.IsTooDark || result.Quality.IsTooBright))
-	
+
 	// Also consider validation errors from QualityValidator
 	hasValidationErrors := len(result.Errors) > 0
-	
+
 	// Image is valid only if it has no quality issues AND no validation errors
 	result.Quality.IsValid = !hasQualityIssues && !hasValidationErrors
 }

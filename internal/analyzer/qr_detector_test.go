@@ -37,7 +37,7 @@ func TestDetectQRCode_SimplePattern(t *testing.T) {
 		for x := 0; x < 100; x++ {
 			// Create a checkerboard pattern
 			if (x/10+y/10)%2 == 0 {
-				img.Set(x, y, color.RGBA{0, 0, 0, 255})     // Black
+				img.Set(x, y, color.RGBA{0, 0, 0, 255}) // Black
 			} else {
 				img.Set(x, y, color.RGBA{255, 255, 255, 255}) // White
 			}
@@ -74,7 +74,7 @@ func TestDetectQRCode_GrayscaleImage(t *testing.T) {
 		for x := 0; x < 100; x++ {
 			// Create alternating stripes
 			if x%20 < 10 {
-				gray.Set(x, y, color.Gray{0})   // Black stripe
+				gray.Set(x, y, color.Gray{0}) // Black stripe
 			} else {
 				gray.Set(x, y, color.Gray{255}) // White stripe
 			}
@@ -87,6 +87,6 @@ func TestDetectQRCode_GrayscaleImage(t *testing.T) {
 	_ = hasQR // Result depends on pattern detection
 }
 
-// Note: Tests for private methods (detectFinderPatterns, checkConcentricSquares, toBinary) 
+// Note: Tests for private methods (detectFinderPatterns, checkConcentricSquares, toBinary)
 // are not included as they are internal implementation details and not part of the public API.
 // The public DetectQRCode method provides sufficient test coverage for the QR detection functionality.

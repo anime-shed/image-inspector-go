@@ -134,7 +134,7 @@ func TestAnalyze_BrightImage(t *testing.T) {
 	}
 }
 
-func TestAnalyze_BlurryImage(t *testing.T) {
+func TestAnalyze_DarkImage(t *testing.T) {
 	analyzer, err := NewCoreAnalyzer()
 	if err != nil {
 		t.Fatalf("Failed to create image analyzer: %v", err)
@@ -216,9 +216,9 @@ func TestAnalyze_OverexposedImage(t *testing.T) {
 
 	// Test with multiple different images
 	testCases := []struct {
-		name  string
-		color color.RGBA
-		width int
+		name   string
+		color  color.RGBA
+		width  int
 		height int
 	}{
 		{"Gray Image", color.RGBA{128, 128, 128, 255}, 800, 600},

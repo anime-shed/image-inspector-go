@@ -34,8 +34,6 @@ func NewMetricsCalculator() MetricsCalculator {
 	}
 }
 
-
-
 // CalculateBasicMetrics computes basic image metrics with parallel processing and Gonum optimizations
 func (omc *metricsCalculator) CalculateBasicMetrics(img image.Image) metrics {
 	bounds := img.Bounds()
@@ -222,10 +220,6 @@ func (omc *metricsCalculator) calculateBrightnessSequential(gray *image.Gray) fl
 func (omc *metricsCalculator) DetectSkew(gray *image.Gray) *float64 {
 	bounds := gray.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
-
-	// Get reusable slice from pool
-	coords := omc.slicePool.Get().([]float64)
-	defer omc.slicePool.Put(coords[:0])
 
 	// Simple edge detection using Sobel operator
 	var xCoords, yCoords []float64
