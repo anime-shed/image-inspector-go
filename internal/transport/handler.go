@@ -11,9 +11,8 @@ import (
 	apperrors "go-image-inspector/internal/errors"
 	"go-image-inspector/internal/logger"
 	"go-image-inspector/internal/service"
-	"go-image-inspector/pkg/config"
+	"go-image-inspector/internal/config"
 	"go-image-inspector/pkg/models"
-	"go-image-inspector/pkg/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -30,7 +29,7 @@ type AnalysisOptionsRequest = models.AnalysisOptionsRequest
 // ErrorResponse is now an alias to the shared models.ErrorResponse
 type ErrorResponse = models.ErrorResponse
 
-func NewHandler(analysisService service.ImageAnalysisService, detailedService *services.DetailedAnalysisService, cfg *config.Config) http.Handler {
+func NewHandler(analysisService service.ImageAnalysisService, cfg *config.Config) http.Handler {
 	r := gin.Default()
 
 	// Add middleware
@@ -43,17 +42,7 @@ func NewHandler(analysisService service.ImageAnalysisService, detailedService *s
 	r.GET("/health", healthCheck)
 	r.POST("/analyze", analyzeImage(analysisService, cfg))
 	r.POST("/analyze/options", analyzeImageWithOptions(analysisService, cfg))
-	if detailedService == nil {
-		logger.WithField("route", "/detailed-analyze").
-			Warn("DetailedAnalysisService is nil; route not registered")
-	} else {
-		if detailedService == nil {
-			logger.WithField("route", "/detailed-analyze").
-				Warn("DetailedAnalysisService is nil; route not registered")
-		} else {
-			r.POST("/detailed-analyze", detailedAnalyzeImage(detailedService, cfg))
-		}
-	}
+	r.POST("/detailed-analyze", detailedAnalyzeImage(analysisService, cfg))
 	return r
 }
 
@@ -92,7 +81,7 @@ func analyzeImage(analysisService service.ImageAnalysisService, cfg *config.Conf
 		}).Debug("Starting image analysis")
 
 		// Delegate business logic to service layer
-		var response *service.ImageAnalysisResponse
+		var response *models.ImageAnalysisResponse
 		var err error
 
 		if req.IsOCR && req.ExpectedText != "" {
@@ -220,7 +209,7 @@ func analyzeImageWithOptions(analysisService service.ImageAnalysisService, cfg *
 	}
 }
 
-func detailedAnalyzeImage(detailedService *services.DetailedAnalysisService, cfg *config.Config) gin.HandlerFunc {
+func detailedAnalyzeImage(analysisService service.ImageAnalysisService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startTime := time.Now()
 
@@ -251,8 +240,8 @@ func detailedAnalyzeImage(detailedService *services.DetailedAnalysisService, cfg
 			URL: req.URL,
 		}
 
-		// Delegate to detailed service
-		response, err := detailedService.AnalyzeImageDetailed(detailedReq)
+		// Delegate to service
+		response, err := analysisService.AnalyzeImageDetailed(c.Request.Context(), detailedReq)
 		if err != nil {
 			// Log error with context
 			logger.WithError(err).WithFields(logrus.Fields{

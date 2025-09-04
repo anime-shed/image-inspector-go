@@ -2,7 +2,12 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"image"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
 	"go-image-inspector/internal/storage"
 	"go-image-inspector/pkg/validation"
 )
@@ -33,10 +38,51 @@ func (r *HTTPImageRepository) ValidateImageURL(imageURL string) error {
 
 // GetImageMetadata retrieves metadata about an image without downloading it
 func (r *HTTPImageRepository) GetImageMetadata(ctx context.Context, imageURL string) (*ImageMetadata, error) {
-	// This is a placeholder implementation
-	// In a real scenario, this would make a HEAD request to get metadata
+	req, err := http.NewRequestWithContext(ctx, "HEAD", imageURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL: %w", err)
+	}
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch metadata: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code %d", resp.StatusCode)
+	}
+
+	// Extract content length
+	contentLength := int64(0)
+	if contentLengthStr := resp.Header.Get("Content-Length"); contentLengthStr != "" {
+		if cl, err := strconv.ParseInt(contentLengthStr, 10, 64); err == nil {
+			contentLength = cl
+		}
+	}
+
+	// Extract content type and format
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/jpeg" // Default fallback
+	}
+
+	format := "JPEG" // Default
+	if strings.Contains(contentType, "png") {
+		format = "PNG"
+	} else if strings.Contains(contentType, "gif") {
+		format = "GIF"
+	} else if strings.Contains(contentType, "webp") {
+		format = "WEBP"
+	}
+
 	return &ImageMetadata{
-		ContentType: "image/jpeg",
-		Format:      "JPEG",
+		ContentType:   contentType,
+		ContentLength: contentLength,
+		Format:        format,
 	}, nil
 }

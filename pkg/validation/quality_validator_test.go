@@ -61,7 +61,7 @@ func TestValidateBasicQuality_Blurry(t *testing.T) {
 	validator := NewQualityValidator()
 
 	metrics := ImageQualityMetrics{
-		LaplacianVar:   50.0, // Below threshold (100)
+		LaplacianVar:   0.5, // Extremely low variance - truly blurry
 		AvgLuminance:   0.5,
 		AvgSaturation:  0.3,
 		ChannelBalance: [3]float64{0.33, 0.33, 0.34},
@@ -77,8 +77,8 @@ func TestValidateBasicQuality_Blurry(t *testing.T) {
 			if issue.Severity != "error" {
 				t.Errorf("Expected blurriness to be error severity, got %s", issue.Severity)
 			}
-			if issue.ActualValue != 50.0 {
-				t.Errorf("Expected actual value to be 50.0, got %f", issue.ActualValue)
+			if issue.ActualValue != 0.5 {
+				t.Errorf("Expected actual value to be 0.5, got %f", issue.ActualValue)
 			}
 			break
 		}

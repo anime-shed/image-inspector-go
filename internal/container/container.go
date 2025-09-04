@@ -1,58 +1,51 @@
 package container
 
 import (
-	"fmt"
-	"net/http"
 	"go-image-inspector/internal/analyzer"
+	"go-image-inspector/internal/config"
 	"go-image-inspector/internal/repository"
 	"go-image-inspector/internal/service"
 	"go-image-inspector/internal/storage"
 	"go-image-inspector/internal/transport"
-	"go-image-inspector/pkg/config"
-	"go-image-inspector/pkg/services"
+	"net/http"
 )
 
-// Container holds all application dependencies
+// Container holds all application dependencies using dependency injection
 type Container struct {
-	config                  *config.Config
-	imageFetcher            storage.ImageFetcher
-	imageAnalyzer           analyzer.ImageAnalyzer
-	imageRepository         repository.ImageRepository
-	imageAnalysisService    service.ImageAnalysisService
-	detailedAnalysisService *services.DetailedAnalysisService
-	handler                 http.Handler
+	config                     *config.Config
+	imageFetcher              storage.ImageFetcher
+	imageAnalyzer             analyzer.ImageAnalyzer
+	imageRepository           repository.ImageRepository
+	analysisService    service.ImageAnalysisService
+	handler                   http.Handler
 }
 
-// NewContainer creates a new dependency injection container
-func NewContainer() (*Container, error) {
-	// Load configuration
-	cfg, err := config.LoadFromEnv()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Build dependency graph
+// NewContainer creates and initializes all dependencies using dependency injection
+func NewContainer(cfg *config.Config) (*Container, error) {
+	// Create image fetcher
 	imageFetcher := storage.NewHTTPImageFetcher()
-	imageAnalyzer, err := analyzer.NewImageAnalyzer()
+
+	// Create single image analyzer (remove duplication)
+	imageAnalyzer, err := analyzer.NewCoreAnalyzer()
 	if err != nil {
 		return nil, err
 	}
 
+	// Create image repository
 	imageRepository := repository.NewHTTPImageRepository(imageFetcher)
-	imageAnalysisService := service.NewImageAnalysisService(imageRepository, imageAnalyzer)
-	
-	// Initialize detailed analysis service
-	detailedAnalysisService := services.NewDetailedAnalysisService(imageAnalyzer, imageAnalysisService)
-	
-	handler := transport.NewHandler(imageAnalysisService, detailedAnalysisService, cfg)
+
+	// Create analysis service (single service for both endpoints)
+	analysisService := service.NewImageAnalysisService(imageRepository, imageAnalyzer)
+
+	// Create HTTP handler with service
+	handler := transport.NewHandler(analysisService, cfg)
 
 	return &Container{
 		config:                  cfg,
 		imageFetcher:            imageFetcher,
 		imageAnalyzer:           imageAnalyzer,
 		imageRepository:         imageRepository,
-		imageAnalysisService:    imageAnalysisService,
-		detailedAnalysisService: detailedAnalysisService,
+		analysisService:  analysisService,
 		handler:                 handler,
 	}, nil
 }
@@ -65,4 +58,9 @@ func (c *Container) Handler() http.Handler {
 // Config returns the configuration
 func (c *Container) Config() *config.Config {
 	return c.config
+}
+
+// GetAnalysisService returns the analysis service
+func (c *Container) GetAnalysisService() service.ImageAnalysisService {
+	return c.analysisService
 }

@@ -23,7 +23,7 @@ func TestNewWorkerPool_ZeroWorkers(t *testing.T) {
 	// We can't access private field, so just test that pool was created
 }
 
-func TestWorkerPool_SubmitAndWait(t *testing.T) {
+func TestWorkerPool_Submit(t *testing.T) {
 	pool := NewWorkerPool(2)
 	pool.Start()
 	defer pool.Close()
@@ -47,7 +47,7 @@ func TestWorkerPool_SubmitAndWait(t *testing.T) {
 	}
 }
 
-func TestWorkerPool_ConcurrentJobs(t *testing.T) {
+func TestWorkerPool_Concurrent(t *testing.T) {
 	pool := NewWorkerPool(3)
 	pool.Start()
 	defer pool.Close()

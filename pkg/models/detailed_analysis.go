@@ -1,5 +1,9 @@
 package models
 
+import (
+	"encoding/json"
+)
+
 // DetailedAnalysisResponse represents a comprehensive image analysis response
 // with all individual quality metrics, raw values, thresholds, and detailed breakdowns
 type DetailedAnalysisResponse struct {
@@ -21,7 +25,7 @@ type DetailedAnalysisResponse struct {
 	Thresholds AppliedThresholds `json:"applied_thresholds"`
 	
 	// Individual quality checks with detailed results
-	QualityChecks []QualityCheckResult `json:"quality_checks"`
+	QualityChecks []QualityCheckResult `json:"quality_checks,omitempty"`
 	
 	// OCR specific analysis (if applicable)
 	OCRAnalysis *DetailedOCRAnalysis `json:"ocr_analysis,omitempty"`
@@ -32,9 +36,33 @@ type DetailedAnalysisResponse struct {
 	// Processing details
 	ProcessingDetails ProcessingDetails `json:"processing_details"`
 	
-	// Validation errors and warnings
-	Errors   []string `json:"errors,omitempty"`
-	Warnings []string `json:"warnings,omitempty"`
+	// Errors encountered during processing
+	Errors []string `json:"errors,omitempty"`
+}
+
+// MarshalJSON implements custom JSON marshaling for DetailedAnalysisResponse
+// Excludes empty arrays and zero values to reduce payload size
+func (d DetailedAnalysisResponse) MarshalJSON() ([]byte, error) {
+	type Alias DetailedAnalysisResponse
+	aux := &struct {
+		*Alias
+		QualityChecks []QualityCheckResult `json:"quality_checks,omitempty"`
+		Errors        []string            `json:"errors,omitempty"`
+	}{
+		Alias: (*Alias)(&d),
+	}
+	
+	// Only include quality_checks if it has meaningful data
+	if len(d.QualityChecks) > 0 {
+		aux.QualityChecks = d.QualityChecks
+	}
+	
+	// Only include Errors if there are any
+	if len(d.Errors) > 0 {
+		aux.Errors = d.Errors
+	}
+	
+	return json.Marshal(aux)
 }
 
 // QualityAnalysis provides comprehensive quality assessment
@@ -63,73 +91,127 @@ type QualityAnalysis struct {
 	ColorScore          float64 `json:"color_score"`
 }
 
+
+
 // RawMetrics contains all calculated raw values
 type RawMetrics struct {
 	// Sharpness metrics
 	LaplacianVariance    float64 `json:"laplacian_variance"`
-	LaplacianMean        float64 `json:"laplacian_mean"`
-	LaplacianStdDev      float64 `json:"laplacian_std_dev"`
+	LaplacianMean        float64 `json:"laplacian_mean,omitempty"`
+	LaplacianStdDev      float64 `json:"laplacian_std_dev,omitempty"`
 	
 	// Brightness and luminance
 	Brightness           float64 `json:"brightness"`
 	AvgLuminance         float64 `json:"average_luminance"`
-	LuminanceDistribution [10]float64 `json:"luminance_distribution"` // Histogram bins
+	LuminanceDistribution [10]float64 `json:"luminance_distribution,omitempty"`
 	
 	// Color metrics
 	AvgSaturation        float64    `json:"average_saturation"`
-	ChannelBalance       [3]float64 `json:"channel_balance"` // R, G, B
-	ChannelMeans         [3]float64 `json:"channel_means"`
-	ChannelStdDevs       [3]float64 `json:"channel_std_devs"`
+	ChannelBalance       [3]float64 `json:"channel_balance"`
+	ChannelMeans         [3]float64 `json:"channel_means,omitempty"`
+	ChannelStdDevs       [3]float64 `json:"channel_std_devs,omitempty"`
 	
 	// Exposure metrics
-	OverexposedPixelRatio  float64 `json:"overexposed_pixel_ratio"`
-	UnderexposedPixelRatio float64 `json:"underexposed_pixel_ratio"`
-	DynamicRange           float64 `json:"dynamic_range"`
+	OverexposedPixelRatio  float64 `json:"overexposed_pixel_ratio,omitempty"`
+	UnderexposedPixelRatio float64 `json:"underexposed_pixel_ratio,omitempty"`
+	DynamicRange           float64 `json:"dynamic_range,omitempty"`
 	
 	// Geometric metrics
 	SkewAngle            *float64 `json:"skew_angle,omitempty"`
-	NumContours          int      `json:"num_contours"`
-	EdgePixelRatio       float64  `json:"edge_pixel_ratio"`
+	NumContours          int      `json:"num_contours,omitempty"`
+	EdgePixelRatio       float64  `json:"edge_pixel_ratio,omitempty"`
 	
 	// Resolution and size
-	Width                int     `json:"width"`
-	Height               int     `json:"height"`
-	TotalPixels          int     `json:"total_pixels"`
-	AspectRatio          float64 `json:"aspect_ratio"`
+	Width                int     `json:"width,omitempty"`
+	Height               int     `json:"height,omitempty"`
+	TotalPixels          int     `json:"total_pixels,omitempty"`
+	AspectRatio          float64 `json:"aspect_ratio,omitempty"`
+}
+
+// MarshalJSON implements custom JSON marshaling for RawMetrics
+// Excludes zero values and empty arrays to reduce payload size
+func (r RawMetrics) MarshalJSON() ([]byte, error) {
+	type Alias RawMetrics
+	aux := &struct {
+		*Alias
+		LuminanceDistribution *[10]float64 `json:"luminance_distribution,omitempty"`
+		ChannelMeans         *[3]float64  `json:"channel_means,omitempty"`
+		ChannelStdDevs       *[3]float64  `json:"channel_std_devs,omitempty"`
+	}{
+		Alias: (*Alias)(&r),
+	}
+	
+	// Only include luminance distribution if it has non-zero values
+	hasLuminanceData := false
+	for _, val := range r.LuminanceDistribution {
+		if val != 0 {
+			hasLuminanceData = true
+			break
+		}
+	}
+	if hasLuminanceData {
+		aux.LuminanceDistribution = &r.LuminanceDistribution
+	}
+	
+	// Only include channel means if they have non-zero values
+	hasChannelMeans := false
+	for _, val := range r.ChannelMeans {
+		if val != 0 {
+			hasChannelMeans = true
+			break
+		}
+	}
+	if hasChannelMeans {
+		aux.ChannelMeans = &r.ChannelMeans
+	}
+	
+	// Only include channel std devs if they have non-zero values
+	hasChannelStdDevs := false
+	for _, val := range r.ChannelStdDevs {
+		if val != 0 {
+			hasChannelStdDevs = true
+			break
+		}
+	}
+	if hasChannelStdDevs {
+		aux.ChannelStdDevs = &r.ChannelStdDevs
+	}
+	
+	return json.Marshal(aux)
 }
 
 // AppliedThresholds shows all thresholds used in analysis
 type AppliedThresholds struct {
 	// Sharpness thresholds
 	MinLaplacianVariance       float64 `json:"min_laplacian_variance"`
-	MaxLaplacianVariance       float64 `json:"max_laplacian_variance"`
-	MinLaplacianVarianceForOCR float64 `json:"min_laplacian_variance_for_ocr"`
+	MaxLaplacianVariance       float64 `json:"max_laplacian_variance,omitempty"`
+	MinLaplacianVarianceForOCR float64 `json:"min_laplacian_variance_for_ocr,omitempty"`
 	
 	// Brightness thresholds
 	MinBrightness              float64 `json:"min_brightness"`
 	MaxBrightness              float64 `json:"max_brightness"`
 	
 	// Luminance thresholds
-	MinLuminance               float64 `json:"min_luminance"`
-	MaxLuminance               float64 `json:"max_luminance"`
+	MinLuminance               float64 `json:"min_luminance,omitempty"`
+	MaxLuminance               float64 `json:"max_luminance,omitempty"`
 	
 	// Saturation thresholds
-	MinSaturation              float64 `json:"min_saturation"`
+	MinSaturation              float64 `json:"min_saturation,omitempty"`
 	
 	// Channel balance threshold
-	MaxChannelImbalance        float64 `json:"max_channel_imbalance"`
+	MaxChannelImbalance        float64 `json:"max_channel_imbalance,omitempty"`
 	
 	// Exposure thresholds
 	OverexposureThreshold      float64 `json:"overexposure_threshold"`
 	OversaturationThreshold    float64 `json:"oversaturation_threshold"`
 	
 	// Geometric thresholds
-	MaxSkewAngle               float64 `json:"max_skew_angle"`
+	MaxSkewAngle               float64 `json:"max_skew_angle,omitempty"`
 	
 	// Resolution thresholds
-	MinWidth                   int     `json:"min_width"`
-	MinHeight                  int     `json:"min_height"`
-	MinTotalPixels             int     `json:"min_total_pixels"`
+	MinWidth                   int     `json:"min_width,omitempty"`
+	MinHeight                  int     `json:"min_height,omitempty"`
+	MinTotalPixels             int     `json:"min_total_pixels,omitempty"`
 }
 
 // QualityCheckResult represents the result of an individual quality check

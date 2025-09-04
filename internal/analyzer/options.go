@@ -29,7 +29,7 @@ type AnalysisOptions struct {
 	MaxWorkers    int
 }
 
-// DefaultOptions returns the standard analysis configuration
+// DefaultOptions returns default analysis options
 func DefaultOptions() AnalysisOptions {
 	return AnalysisOptions{
 		OCRMode:                 false,
@@ -48,7 +48,7 @@ func DefaultOptions() AnalysisOptions {
 	}
 }
 
-// OCROptions returns configuration optimized for OCR analysis
+// OCROptions returns options for OCR analysis
 func OCROptions() AnalysisOptions {
 	opts := DefaultOptions()
 	opts.OCRMode = true
@@ -60,7 +60,7 @@ func OCROptions() AnalysisOptions {
 	return opts
 }
 
-// FastOptions returns configuration for quick analysis
+// FastOptions returns options for fast analysis
 func FastOptions() AnalysisOptions {
 	opts := DefaultOptions()
 	opts.FastMode = true
@@ -71,7 +71,7 @@ func FastOptions() AnalysisOptions {
 	return opts
 }
 
-// QualityOptions returns configuration for comprehensive quality analysis
+// QualityOptions returns options for quality analysis
 func QualityOptions() AnalysisOptions {
 	opts := DefaultOptions()
 	opts.QualityMode = true

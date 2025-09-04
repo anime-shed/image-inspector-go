@@ -32,7 +32,7 @@ func createGradientImage(width, height int) *image.RGBA {
 }
 
 func TestNewImageAnalyzer(t *testing.T) {
-	analyzer, err := NewImageAnalyzer()
+	analyzer, err := NewCoreAnalyzer()
 	if err != nil {
 		t.Fatalf("Failed to create image analyzer: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestNewImageAnalyzer(t *testing.T) {
 }
 
 func TestAnalyze_BasicImage(t *testing.T) {
-	analyzer, err := NewImageAnalyzer()
+	analyzer, err := NewCoreAnalyzer()
 	if err != nil {
 		t.Fatalf("Failed to create image analyzer: %v", err)
 	}
@@ -72,9 +72,9 @@ func TestAnalyze_BasicImage(t *testing.T) {
 }
 
 func TestAnalyze_OCRMode(t *testing.T) {
-	analyzer, err := NewImageAnalyzer()
+	analyzer, err := NewCoreAnalyzer()
 	if err != nil {
-		t.Fatalf("Failed to create image analyzer: %v", err)
+		t.Fatalf("Failed to create analyzer: %v", err)
 	}
 
 	// Create a test image
@@ -96,7 +96,7 @@ func TestAnalyze_OCRMode(t *testing.T) {
 }
 
 func TestAnalyze_LowResolutionImage(t *testing.T) {
-	analyzer, err := NewImageAnalyzer()
+	analyzer, err := NewCoreAnalyzer()
 	if err != nil {
 		t.Fatalf("Failed to create image analyzer: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestAnalyze_LowResolutionImage(t *testing.T) {
 }
 
 func TestAnalyze_BrightImage(t *testing.T) {
-	analyzer, err := NewImageAnalyzer()
+	analyzer, err := NewCoreAnalyzer()
 	if err != nil {
 		t.Fatalf("Failed to create image analyzer: %v", err)
 	}
@@ -134,8 +134,8 @@ func TestAnalyze_BrightImage(t *testing.T) {
 	}
 }
 
-func TestAnalyze_DarkImage(t *testing.T) {
-	analyzer, err := NewImageAnalyzer()
+func TestAnalyze_BlurryImage(t *testing.T) {
+	analyzer, err := NewCoreAnalyzer()
 	if err != nil {
 		t.Fatalf("Failed to create image analyzer: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestAnalyze_DarkImage(t *testing.T) {
 }
 
 func TestAnalyzeWithOCR(t *testing.T) {
-	analyzer, err := NewImageAnalyzer()
+	analyzer, err := NewCoreAnalyzer()
 	if err != nil {
 		t.Fatalf("Failed to create image analyzer: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestAnalyzeWithOCR(t *testing.T) {
 }
 
 func TestAnalyze_Performance(t *testing.T) {
-	analyzer, err := NewImageAnalyzer()
+	analyzer, err := NewCoreAnalyzer()
 	if err != nil {
 		t.Fatalf("Failed to create image analyzer: %v", err)
 	}
@@ -208,8 +208,8 @@ func TestAnalyze_Performance(t *testing.T) {
 	}
 }
 
-func TestAnalyze_MultipleImages(t *testing.T) {
-	analyzer, err := NewImageAnalyzer()
+func TestAnalyze_OverexposedImage(t *testing.T) {
+	analyzer, err := NewCoreAnalyzer()
 	if err != nil {
 		t.Fatalf("Failed to create image analyzer: %v", err)
 	}

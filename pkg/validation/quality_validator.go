@@ -39,7 +39,7 @@ func DefaultQualityThresholds() QualityThresholds {
 	return QualityThresholds{
 		MinLaplacianVariance:       100.0,  // Minimum variance for sharpness (based on research)
 		MaxLaplacianVariance:       2000.0, // Maximum variance to detect over-sharpening/noise
-		MinLaplacianVarianceForOCR: 200.0,  // Higher threshold for OCR quality
+		MinLaplacianVarianceForOCR: 500.0,  // Higher threshold for OCR quality
 		MinBrightness:              80.0,
 		MaxBrightness:              220.0,
 		MinLuminance:               0.2,

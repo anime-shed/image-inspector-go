@@ -9,19 +9,24 @@ import (
 	"syscall"
 	"time"
 
+	"go-image-inspector/internal/config"
 	"go-image-inspector/internal/container"
 
 	"github.com/sirupsen/logrus"
 )
 
 func main() {
+	// Load configuration
+	cfg, err := config.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
 	// Initialize dependency injection container
-	c, err := container.NewContainer()
+	c, err := container.NewContainer(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize container: %v", err)
 	}
-
-	cfg := c.Config()
 
 	// Setup structured logging
 	logrus.SetFormatter(&logrus.JSONFormatter{})
