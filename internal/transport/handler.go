@@ -2,9 +2,11 @@ package transport
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/anime-shed/image-inspector-go/internal/analyzer"
@@ -70,8 +72,10 @@ func analyzeImage(analysisService service.ImageAnalysisService, cfg *config.Conf
 		}
 
 		// Check for IsOCR in query parameter (takes precedence over JSON body)
-		if isOCRQuery := c.Query("IsOCR"); isOCRQuery != "" {
-			req.IsOCR = isOCRQuery == "true"
+		if v := c.Query("is_ocr"); v != "" {
+			req.IsOCR = strings.EqualFold(v, "true") || v == "1"
+		} else if v := c.Query("IsOCR"); v != "" { // backward-compat
+			req.IsOCR = strings.EqualFold(v, "true") || v == "1"
 		}
 
 		// Log analysis attempt
@@ -145,29 +149,11 @@ func analyzeImageWithOptions(analysisService service.ImageAnalysisService, cfg *
 			return
 		}
 
-		// Use default options if none provided
+		// Use default options, then overlay request-provided values
 		options := analyzer.DefaultOptions()
 		if req.Options != nil {
-			// Convert interface{} back to AnalysisOptions
-			if opts, ok := req.Options.(*analyzer.AnalysisOptions); ok {
-				options = *opts
-			} else if optsMap, ok := req.Options.(map[string]interface{}); ok {
-				// Handle JSON unmarshaling case where Options comes as map
-				if ocrMode, exists := optsMap["ocr_mode"]; exists {
-					if ocrModeBool, ok := ocrMode.(bool); ok {
-						options.OCRMode = ocrModeBool
-					}
-				}
-				if fastMode, exists := optsMap["fast_mode"]; exists {
-					if fastModeBool, ok := fastMode.(bool); ok {
-						options.FastMode = fastModeBool
-					}
-				}
-				if qualityMode, exists := optsMap["quality_mode"]; exists {
-					if qualityModeBool, ok := qualityMode.(bool); ok {
-						options.QualityMode = qualityModeBool
-					}
-				}
+			if raw, mErr := json.Marshal(req.Options); mErr == nil {
+				_ = json.Unmarshal(raw, &options) // keep defaults on error
 			}
 		}
 
@@ -214,6 +200,8 @@ func analyzeImageWithOptions(analysisService service.ImageAnalysisService, cfg *
 func detailedAnalyzeImage(analysisService service.ImageAnalysisService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startTime := time.Now()
+		ctx, cancel := context.WithTimeout(c.Request.Context(), cfg.RequestTimeout)
+		defer cancel()
 
 		// Log request start
 		logger.WithFields(logrus.Fields{
@@ -223,7 +211,7 @@ func detailedAnalyzeImage(analysisService service.ImageAnalysisService, cfg *con
 			"ip":         c.ClientIP(),
 		}).Info("Processing detailed image analysis request")
 
-		var req AnalysisRequest
+		var req models.DetailedAnalysisRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			logger.WithError(err).WithFields(logrus.Fields{
 				"ip": c.ClientIP(),
@@ -237,13 +225,8 @@ func detailedAnalyzeImage(analysisService service.ImageAnalysisService, cfg *con
 			"url": req.URL,
 		}).Debug("Starting detailed image analysis")
 
-		// Create detailed analysis request
-		detailedReq := models.DetailedAnalysisRequest{
-			URL: req.URL,
-		}
-
-		// Delegate to service
-		response, err := analysisService.AnalyzeImageDetailed(c.Request.Context(), detailedReq)
+		// Delegate to service with full request
+		response, err := analysisService.AnalyzeImageDetailed(ctx, req)
 		if err != nil {
 			// Log error with context
 			logger.WithError(err).WithFields(logrus.Fields{

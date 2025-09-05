@@ -99,7 +99,7 @@ func TestHTTPImageFetcher_RetryLogic(t *testing.T) {
 			defer server.Close()
 
 			// Create fetcher
-			fetcher := NewHTTPImageFetcher()
+			fetcher := NewHTTPImageFetcher(30 * time.Second)
 
 			// Test the fetch
 			ctx := context.Background()
@@ -159,7 +159,7 @@ func TestHTTPImageFetcher_NetworkError_Retry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fetcher := NewHTTPImageFetcher()
+	fetcher := NewHTTPImageFetcher(30 * time.Second)
 	ctx := context.Background()
 
 	start := time.Now()

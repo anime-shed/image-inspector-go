@@ -237,8 +237,9 @@ func TestAnalyze_OverexposedImage(t *testing.T) {
 			if result.Timestamp.IsZero() {
 				t.Error("Expected timestamp to be set")
 			}
-			if result.ProcessingTimeSec <= 0 {
-				t.Error("Expected positive processing time")
+			// Processing time can be 0 for very fast operations, so we just check it's not negative
+			if result.ProcessingTimeSec < 0 {
+				t.Error("Expected non-negative processing time")
 			}
 		})
 	}

@@ -25,7 +25,7 @@ type HTTPImageFetcher struct {
 
 // NewHTTPImageFetcher creates an HTTP image fetcher
 // Implements optimizations from PERFORMANCE_OPTIMIZATION_ANALYSIS.md Phase 1
-func NewHTTPImageFetcher() ImageFetcher {
+func NewHTTPImageFetcher(fetchTimeout time.Duration) ImageFetcher {
 	// Optimized transport configuration for single image downloads
 	transport := &http.Transport{
 		// Connection pooling optimized for image fetching
@@ -64,14 +64,14 @@ func NewHTTPImageFetcher() ImageFetcher {
 
 		// TLS configuration with proper security
 		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
+			MinVersion: tls.VersionTLS13,
 		},
 	}
 
 	return &HTTPImageFetcher{
 		client: &http.Client{
 			Transport: transport,
-			Timeout:   30 * time.Second,
+			Timeout:   fetchTimeout,
 
 			// Limit redirects to avoid unexpected behavior
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -149,7 +149,7 @@ func (h *HTTPImageFetcher) FetchImage(ctx context.Context, imageURL string) (ima
 	}
 
 	// Check final result
-	if resp == nil || (err == nil && resp.StatusCode != http.StatusOK) {
+	if resp == nil || resp.StatusCode != http.StatusOK {
 		if lastErr != nil {
 			return nil, fmt.Errorf("failed to fetch image after 3 attempts: %w", lastErr)
 		}

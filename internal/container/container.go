@@ -23,7 +23,7 @@ type Container struct {
 // NewContainer creates and initializes all dependencies using dependency injection
 func NewContainer(cfg *config.Config) (*Container, error) {
 	// Create image fetcher
-	imageFetcher := storage.NewHTTPImageFetcher()
+	imageFetcher := storage.NewHTTPImageFetcher(cfg.ImageFetchTimeout)
 
 	// Create single image analyzer (remove duplication)
 	imageAnalyzer, err := analyzer.NewCoreAnalyzer()
@@ -41,12 +41,12 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	handler := transport.NewHandler(analysisService, cfg)
 
 	return &Container{
-		config:                  cfg,
-		imageFetcher:            imageFetcher,
-		imageAnalyzer:           imageAnalyzer,
-		imageRepository:         imageRepository,
-		analysisService:  analysisService,
-		handler:                 handler,
+		config:          cfg,
+		imageFetcher:    imageFetcher,
+		imageAnalyzer:   imageAnalyzer,
+		imageRepository: imageRepository,
+		analysisService: analysisService,
+		handler:         handler,
 	}, nil
 }
 
@@ -63,4 +63,13 @@ func (c *Container) Config() *config.Config {
 // GetAnalysisService returns the analysis service
 func (c *Container) GetAnalysisService() service.ImageAnalysisService {
 	return c.analysisService
+}
+
+// Close shuts down the container and releases resources
+func (c *Container) Close() error {
+	// Close the image analyzer if it has a Close method
+	if closer, ok := c.imageAnalyzer.(interface{ Close() error }); ok {
+		return closer.Close()
+	}
+	return nil
 }

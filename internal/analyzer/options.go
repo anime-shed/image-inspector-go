@@ -3,30 +3,30 @@ package analyzer
 // AnalysisOptions provides flexible configuration for image analysis
 type AnalysisOptions struct {
 	// Analysis modes
-	OCRMode     bool
-	FastMode    bool
-	QualityMode bool
+	OCRMode     bool `json:"ocr_mode"`
+	FastMode    bool `json:"fast_mode"`
+	QualityMode bool `json:"quality_mode"`
 
 	// Quality thresholds
-	BlurThreshold         float64
-	OverexposureThreshold float64
-	OversaturationThreshold float64
-	LuminanceThreshold    float64
+	BlurThreshold              float64 `json:"blur_threshold"`
+	OverexposureThreshold      float64 `json:"overexposure_threshold"`
+	OversaturationThreshold    float64 `json:"oversaturation_threshold"`
+	LuminanceThreshold         float64 `json:"luminance_threshold"`
 
 	// Feature toggles
-	SkipQRDetection      bool
-	SkipWhiteBalance     bool
-	SkipContourDetection bool
-	SkipEdgeDetection    bool
+	SkipQRDetection      bool `json:"skip_qr_detection"`
+	SkipWhiteBalance     bool `json:"skip_white_balance"`
+	SkipContourDetection bool `json:"skip_contour_detection"`
+	SkipEdgeDetection    bool `json:"skip_edge_detection"`
 
 	// OCR-specific options
-	OCRExpectedText string
-	OCRLanguage     string
-	OCREngineMode   string // "fast", "accurate", "legacy"
+	OCRExpectedText string `json:"expected_text"`
+	OCRLanguage     string `json:"ocr_language"`
+	OCREngineMode   string `json:"ocr_engine_mode"` // "fast", "accurate", "legacy"
 
 	// Performance options
-	UseWorkerPool bool
-	MaxWorkers    int
+	UseWorkerPool bool `json:"use_worker_pool"`
+	MaxWorkers    int  `json:"max_workers"`
 }
 
 // DefaultOptions returns default analysis options

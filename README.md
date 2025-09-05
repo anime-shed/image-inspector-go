@@ -82,14 +82,41 @@ The application can be configured using environment variables. The following var
 
 ### Basic Analysis
 - `POST /analyze`: Analyze an image with optional OCR quality validation:
-   - `url`: The URL of the image to be analyzed.
-   - `is_ocr`: (optional) Boolean flag to enable OCR quality validation.
-   - `expected_text`: (optional) This parameter is retained for API compatibility but is not used in the current version.
+  - `url`: The URL of the image to be analyzed.
+  - `is_ocr`: (optional) Boolean flag to enable OCR quality validation.
+  - `expected_text`: (optional) When provided with `is_ocr=true`, triggers the OCR-comparison flow.
 
 ### Advanced Analysis Options
 - `POST /analyze/options`: Analyze an image with custom analysis options:
-   - `url`: The URL of the image to be analyzed.
-   - `options`: Custom analysis configuration options.
+  - `url`: The URL of the image to be analyzed.
+  - `options`: Object with fields (all optional unless stated):
+    - `ocr_mode` (boolean)
+    - `fast_mode` (boolean)
+    - `quality_mode` (boolean, default true)
+    - `blur_threshold` (number)
+    - `overexposure_threshold` (number)
+    - `oversaturation_threshold` (number)
+    - `luminance_threshold` (number)
+    - `skip_qr_detection` (boolean)
+    - `skip_white_balance` (boolean)
+    - `skip_contour_detection` (boolean)
+    - `skip_edge_detection` (boolean)
+    - `use_worker_pool` (boolean, default true)
+    - `max_workers` (integer, 0 = auto)
+
+Example:
+```json
+{
+  "url": "https://example.com/image.jpg",
+  "options": {
+    "quality_mode": true,
+    "ocr_mode": false,
+    "blur_threshold": 120.0,
+    "skip_qr_detection": false,
+    "use_worker_pool": true
+  }
+}
+```
 
 ### Detailed Analysis (New)
 - `POST /detailed-analyze`: Comprehensive image analysis with detailed metrics and thresholds:
@@ -137,9 +164,10 @@ curl -X POST http://localhost:8080/detailed-analyze \
     "include_performance": true,
     "include_raw_metrics": true,
     "custom_thresholds": {
-      "blur_threshold": 100.0,
+      "min_laplacian_variance": 100.0,
       "overexposure_threshold": 0.05,
-      "min_resolution": 500000
+      "oversaturation_threshold": 0.8,
+      "min_total_pixels": 500000
     }
   }'
 ```
@@ -270,16 +298,14 @@ This project makes use of several excellent open-source libraries and tools:
 ### Core Dependencies
 - **[Gin Web Framework](https://github.com/gin-gonic/gin)** - High-performance HTTP web framework for Go
 - **[Logrus](https://github.com/sirupsen/logrus)** - Structured logging for Go
-- **[Viper](https://github.com/spf13/viper)** - Configuration management library
-- **[Go Image](https://golang.org/pkg/image/)** - Go's built-in image processing package
+- **[image](https://pkg.go.dev/image)** - Go's built-in image processing package
 
 ### Development Tools
 - **[Docker](https://www.docker.com/)** - Containerization platform
 - **[Alpine Linux](https://alpinelinux.org/)** - Security-oriented, lightweight Linux distribution used in Docker images
 
 ### Testing & Quality
-- **[Testify](https://github.com/stretchr/testify)** - Testing toolkit for Go (if used in tests)
-- **[Go Modules](https://golang.org/ref/mod)** - Dependency management system
+- **[Testify](https://github.com/stretchr/testify)** - Testing toolkit for Go
 
 We are grateful to the maintainers and contributors of these projects for their excellent work that makes this image analysis service possible.
 

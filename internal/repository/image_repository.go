@@ -44,7 +44,7 @@ func (r *HTTPImageRepository) GetImageMetadata(ctx context.Context, imageURL str
 	}
 
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 10 * time.Second, // TODO: Make this configurable via DI
 	}
 
 	resp, err := client.Do(req)
@@ -72,11 +72,12 @@ func (r *HTTPImageRepository) GetImageMetadata(ctx context.Context, imageURL str
 	}
 
 	format := "JPEG" // Default
-	if strings.Contains(contentType, "png") {
+	ct := strings.ToLower(contentType)
+	if strings.Contains(ct, "png") {
 		format = "PNG"
-	} else if strings.Contains(contentType, "gif") {
+	} else if strings.Contains(ct, "gif") {
 		format = "GIF"
-	} else if strings.Contains(contentType, "webp") {
+	} else if strings.Contains(ct, "webp") {
 		format = "WEBP"
 	}
 

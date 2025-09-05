@@ -461,3 +461,11 @@ func (oca *coreAnalyzer) parseResolution(resolution string) (int, int) {
 
 	return width, height
 }
+
+// Close shuts down the analyzer and releases resources
+func (oca *coreAnalyzer) Close() error {
+	if oca.workerPool != nil {
+		oca.workerPool.Close()
+	}
+	return nil
+}

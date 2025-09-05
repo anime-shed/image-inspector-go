@@ -10,6 +10,9 @@ type ImageAnalyzer interface {
 	
 	// New options-based method
 	AnalyzeWithOptions(img image.Image, options AnalysisOptions) AnalysisResult
+	
+	// Lifecycle management
+	Close() error
 }
 
 // MetricsCalculator handles image metrics computation

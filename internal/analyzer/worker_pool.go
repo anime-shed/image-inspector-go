@@ -74,6 +74,10 @@ func (owp *WorkerPool) worker(workerID int) {
 		// Process the job
 		func() {
 			defer func() {
+				owp.decrementActiveWorkers()
+				// Signal job completion - moved inside the job execution
+				owp.wg.Done()
+				
 				if r := recover(); r != nil {
 					// Enhanced panic recovery with logging capability
 					// In production, this would log the panic details
@@ -83,12 +87,8 @@ func (owp *WorkerPool) worker(workerID int) {
 			// Execute the job
 			owp.incrementActiveWorkers()
 			job()
-			owp.decrementActiveWorkers()
 			owp.incrementCompletedJobs()
 		}()
-		
-		// Signal job completion
-		owp.wg.Done()
 	}
 }
 
@@ -102,14 +102,18 @@ func (owp *WorkerPool) Submit(job func()) bool {
 		return false // Return false if pool is closed
 	}
 
+	// Increment WaitGroup before attempting to submit
+	owp.wg.Add(1)
+	owp.incrementTotalJobs()
+
 	// Non-blocking submit with timeout
 	select {
 	case owp.jobQueue <- job:
-		// Only increment counters after successful submission
-		owp.wg.Add(1)
-		owp.incrementTotalJobs()
 		return true
 	case <-time.After(100 * time.Millisecond):
+		// If submission fails, we need to decrement the WaitGroup
+		owp.wg.Done()
+		atomic.AddInt64(&owp.totalJobs, -1) // Decrement total jobs counter
 		return false // Job rejected due to full queue
 	}
 }
@@ -124,16 +128,20 @@ func (owp *WorkerPool) SubmitWithTimeout(job func(), timeout time.Duration) bool
 		return false
 	}
 	
+	// Increment WaitGroup before attempting to submit
+	owp.wg.Add(1)
+	owp.incrementTotalJobs()
+	
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	
 	select {
 	case owp.jobQueue <- job:
-		// Only increment counters after successful submission
-		owp.wg.Add(1)
-		owp.incrementTotalJobs()
 		return true
 	case <-timer.C:
+		// If submission fails, we need to decrement the WaitGroup
+		owp.wg.Done()
+		atomic.AddInt64(&owp.totalJobs, -1) // Decrement total jobs counter
 		return false
 	}
 }
@@ -169,6 +177,8 @@ func (owp *WorkerPool) Close() {
 	}
 
 	owp.closed = true
+	// Wait for all submitted jobs to complete before closing the channel
+	owp.wg.Wait()
 	close(owp.jobQueue)
 }
 

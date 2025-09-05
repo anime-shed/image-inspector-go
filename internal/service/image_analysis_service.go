@@ -96,8 +96,8 @@ func (s *imageAnalysisService) AnalyzeImageDetailed(ctx context.Context, request
 	// Analyze image with same analyzer but detailed options
 	result := s.analyzer.AnalyzeWithOptions(img, options)
 
-	// Convert to detailed response
-	response := s.convertToDetailedResponse(ctx, request.URL, &result, img)
+	// Convert to detailed response with full context
+	response := s.convertToDetailedResponse(ctx, request, options, &result, img)
 
 	return response, nil
 }
@@ -118,6 +118,33 @@ func (s *imageAnalysisService) createDetailedAnalysisOptions(request models.Deta
 	options.SkipWhiteBalance = false
 	options.SkipContourDetection = false
 	options.SkipEdgeDetection = false
+
+	// Analysis mode
+	switch strings.ToLower(strings.TrimSpace(request.AnalysisMode)) {
+	case "ocr":
+		o := analyzer.OCROptions()
+		o.UseWorkerPool = options.UseWorkerPool
+		options = o
+		if request.ExpectedText != "" {
+			options.OCRExpectedText = request.ExpectedText
+		}
+	}
+
+	// Feature flags
+	if request.FeatureFlags != nil {
+		if v := request.FeatureFlags["skip_qr_detection"]; v {
+			options.SkipQRDetection = true
+		}
+		if v := request.FeatureFlags["skip_white_balance"]; v {
+			options.SkipWhiteBalance = true
+		}
+		if v := request.FeatureFlags["skip_contour_detection"]; v {
+			options.SkipContourDetection = true
+		}
+		if v := request.FeatureFlags["skip_edge_detection"]; v {
+			options.SkipEdgeDetection = true
+		}
+	}
 
 	// Apply custom thresholds if provided
 	if request.CustomThresholds != nil {
@@ -172,12 +199,12 @@ func (s *imageAnalysisService) convertToBasicResponse(imageURL string, result *m
 }
 
 // convertToDetailedResponse converts analyzer result to detailed service response
-func (s *imageAnalysisService) convertToDetailedResponse(ctx context.Context, imageURL string, result *models.AnalysisResult, img interface{}) *models.DetailedAnalysisResponse {
+func (s *imageAnalysisService) convertToDetailedResponse(ctx context.Context, request models.DetailedAnalysisRequest, options analyzer.AnalysisOptions, result *models.AnalysisResult, img image.Image) *models.DetailedAnalysisResponse {
 	// Extract image dimensions
 	width, height := s.getImageDimensions(img)
 
 	// Get image metadata (content length, format, etc.)
-	metadata, err := s.imageRepo.GetImageMetadata(ctx, imageURL)
+	metadata, err := s.imageRepo.GetImageMetadata(ctx, request.URL)
 	if err != nil {
 		// Fallback to defaults if metadata fetch fails
 		metadata = &models.ImageMetadata{
@@ -188,7 +215,7 @@ func (s *imageAnalysisService) convertToDetailedResponse(ctx context.Context, im
 	}
 
 	response := &models.DetailedAnalysisResponse{
-		ImageURL:          imageURL,
+		ImageURL:          request.URL,
 		Timestamp:         result.Timestamp.Format("2006-01-02T15:04:05Z07:00"),
 		ProcessingTimeSec: result.ProcessingTimeSec,
 		ImageMetadata: models.ImageMetadata{
@@ -199,10 +226,10 @@ func (s *imageAnalysisService) convertToDetailedResponse(ctx context.Context, im
 			ContentLength: metadata.ContentLength,
 		},
 		QualityAnalysis: models.QualityAnalysis{
-			Blurry:              result.Quality.Blurry,
 			Overexposed:         result.Quality.Overexposed,
 			Oversaturated:       result.Quality.Oversaturated,
 			IncorrectWB:         result.Quality.IncorrectWB,
+			Blurry:              result.Quality.Blurry,
 			IsLowResolution:     result.Quality.IsLowResolution,
 			IsTooDark:           result.Quality.IsTooDark,
 			IsTooBright:         result.Quality.IsTooBright,
@@ -217,28 +244,84 @@ func (s *imageAnalysisService) convertToDetailedResponse(ctx context.Context, im
 			ExposureScore:       s.calculateExposureScore(result),
 			ColorScore:          s.calculateColorScore(result),
 		},
-		RawMetrics: models.RawMetrics{
-			LaplacianVariance: result.Metrics.LaplacianVar,
-			AvgLuminance:      result.Metrics.AvgLuminance,
-			AvgSaturation:     result.Metrics.AvgSaturation,
-			ChannelBalance:    result.Metrics.ChannelBalance,
-			Brightness:        result.Metrics.AvgLuminance * 255, // Convert to 0-255 scale
-			TotalPixels:       width * height,
-		},
-		Thresholds: models.AppliedThresholds{
-			MinLaplacianVariance:    100.0,
-			OverexposureThreshold:   0.95,
-			OversaturationThreshold: 0.9,
-			MinBrightness:           80.0,
-			MaxBrightness:           220.0,
-		},
+		RawMetrics: func() models.RawMetrics {
+			b := result.Metrics.AvgLuminance * 255.0
+			if b < 0 {
+				b = 0
+			}
+			if b > 255 {
+				b = 255
+			}
+			return models.RawMetrics{
+				LaplacianVariance: result.Metrics.LaplacianVar,
+				AvgLuminance:      result.Metrics.AvgLuminance,
+				AvgSaturation:     result.Metrics.AvgSaturation,
+				ChannelBalance:    result.Metrics.ChannelBalance,
+				Brightness:        b,
+				Width:             width,
+				Height:            height,
+				TotalPixels:       width * height,
+			}
+		}(),
+		Thresholds: func() models.AppliedThresholds {
+			t := models.AppliedThresholds{
+				MinLaplacianVariance:    options.BlurThreshold,
+				OverexposureThreshold:   options.OverexposureThreshold,
+				OversaturationThreshold: options.OversaturationThreshold,
+				MinBrightness:           80.0,
+				MaxBrightness:           220.0,
+			}
+			// If request has resolution/skew thresholds, overlay them (optional fields)
+			if ct := request.CustomThresholds; ct != nil {
+				if ct.MaxSkewAngle != nil {
+					t.MaxSkewAngle = *ct.MaxSkewAngle
+				}
+				// Use MinResolution if provided (this replaces MinWidth, MinHeight, MinTotalPixels)
+				if ct.MinResolution != nil {
+					// Set a default value for min resolution
+					minRes := *ct.MinResolution
+					t.MinWidth = minRes
+					t.MinHeight = minRes
+					t.MinTotalPixels = minRes * minRes
+				}
+			}
+			return t
+		}(),
 		QualityChecks:     s.generateQualityChecks(result),
 		OverallAssessment: s.generateOverallAssessment(result),
-		ProcessingDetails: models.ProcessingDetails{
-			FeaturesAnalyzed:   []string{"sharpness", "exposure", "color", "resolution"},
-			ProcessingOptions:  map[string]interface{}{"analysis_mode": "comprehensive"},
-			PerformanceMetrics: models.PerformanceMetrics{},
-		},
+		ProcessingDetails: func() models.ProcessingDetails {
+			mode := strings.ToLower(strings.TrimSpace(request.AnalysisMode))
+			if mode == "" {
+				if options.OCRMode {
+					mode = "ocr"
+				} else {
+					mode = "quality"
+				}
+			}
+			features := []string{"sharpness", "exposure", "color", "resolution"}
+			skipped := []string{}
+			if options.SkipQRDetection {
+				skipped = append(skipped, "qr")
+			} else {
+				features = append(features, "qr")
+			}
+			if options.SkipWhiteBalance {
+				skipped = append(skipped, "white_balance")
+			}
+			if options.SkipContourDetection {
+				skipped = append(skipped, "contour_detection")
+			}
+			if options.SkipEdgeDetection {
+				skipped = append(skipped, "edge_detection")
+			}
+			return models.ProcessingDetails{
+				AnalysisMode:      mode,
+				FeaturesAnalyzed:  features,
+				SkippedFeatures:   skipped,
+				ProcessingOptions: map[string]interface{}{"use_worker_pool": options.UseWorkerPool, "max_workers": options.MaxWorkers},
+				PerformanceMetrics: models.PerformanceMetrics{},
+			}
+		}(),
 		Errors: result.Errors,
 	}
 
@@ -257,13 +340,12 @@ func (s *imageAnalysisService) convertToDetailedResponse(ctx context.Context, im
 }
 
 // Helper methods
-func (s *imageAnalysisService) getImageDimensions(img interface{}) (int, int) {
-	// Type assertion to get image dimensions from standard Go image.Image
-	if image, ok := img.(image.Image); ok {
-		bounds := image.Bounds()
-		return bounds.Dx(), bounds.Dy()
+func (s *imageAnalysisService) getImageDimensions(img image.Image) (int, int) {
+	if img == nil {
+		return 0, 0
 	}
-	return 0, 0 // Default fallback
+	bounds := img.Bounds()
+	return bounds.Dx(), bounds.Dy()
 }
 
 func (s *imageAnalysisService) calculateQualityScore(result *models.AnalysisResult) float64 {
@@ -529,6 +611,9 @@ func (s *imageAnalysisService) computeTextDensity(ocrResult *models.OCRResult, w
 	charPixels := 12 * 16
 	totalTextPixels := len(ocrResult.ExtractedText) * charPixels
 	totalImagePixels := width * height
+	if totalImagePixels <= 0 {
+		return 0.0
+	}
 
 	density := float64(totalTextPixels) / float64(totalImagePixels)
 
