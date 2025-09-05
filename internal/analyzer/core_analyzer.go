@@ -2,14 +2,15 @@ package analyzer
 
 import (
 	"fmt"
-	"github.com/anime-shed/image-inspector-go/pkg/models"
-	"github.com/anime-shed/image-inspector-go/pkg/validation"
 	"image"
 	"image/draw"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/anime-shed/image-inspector-go/pkg/models"
+	"github.com/anime-shed/image-inspector-go/pkg/validation"
 )
 
 // coreAnalyzer implements ImageAnalyzer interface with enhanced performance

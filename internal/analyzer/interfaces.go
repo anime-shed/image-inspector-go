@@ -7,10 +7,10 @@ type ImageAnalyzer interface {
 	// Legacy methods for backward compatibility
 	Analyze(img image.Image, isOCR bool) AnalysisResult
 	AnalyzeWithOCR(img image.Image, expectedText string) AnalysisResult
-	
+
 	// New options-based method
 	AnalyzeWithOptions(img image.Image, options AnalysisOptions) AnalysisResult
-	
+
 	// Lifecycle management
 	Close() error
 }

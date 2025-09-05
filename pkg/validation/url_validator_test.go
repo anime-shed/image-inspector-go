@@ -2,6 +2,7 @@ package validation
 
 import (
 	"testing"
+
 	apperrors "github.com/anime-shed/image-inspector-go/internal/errors"
 )
 

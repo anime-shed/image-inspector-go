@@ -2,6 +2,7 @@ package service
 
 import (
 	"testing"
+
 	"github.com/anime-shed/image-inspector-go/pkg/models"
 )
 

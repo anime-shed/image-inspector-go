@@ -213,7 +213,7 @@ If you need OCR text extraction functionality, please use a dedicated OCR servic
 
 If you encounter build errors:
 
-1. **Check Go version:** Ensure you have Go 1.16 or higher installed
+1. **Check Go version:** Ensure you have Go 1.25 or higher installed
 2. **Use Docker:** Build using the provided Dockerfile which includes all dependencies
 
 ### Sample Response (Basic OCR Quality Analysis)
@@ -285,7 +285,7 @@ If you encounter build errors:
     "overexposure_threshold": 0.1,
     "oversaturation_threshold": 0.8,
     "max_skew_angle": 5,
-    "min_total_pixels": 10000
+    "min_total_pixels": 800000
   },
   "quality_checks": [
     {

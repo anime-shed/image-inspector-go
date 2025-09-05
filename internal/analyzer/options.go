@@ -8,10 +8,10 @@ type AnalysisOptions struct {
 	QualityMode bool `json:"quality_mode"`
 
 	// Quality thresholds
-	BlurThreshold              float64 `json:"blur_threshold"`
-	OverexposureThreshold      float64 `json:"overexposure_threshold"`
-	OversaturationThreshold    float64 `json:"oversaturation_threshold"`
-	LuminanceThreshold         float64 `json:"luminance_threshold"`
+	BlurThreshold           float64 `json:"blur_threshold"`
+	OverexposureThreshold   float64 `json:"overexposure_threshold"`
+	OversaturationThreshold float64 `json:"oversaturation_threshold"`
+	LuminanceThreshold      float64 `json:"luminance_threshold"`
 
 	// Feature toggles
 	SkipQRDetection      bool `json:"skip_qr_detection"`
@@ -53,7 +53,7 @@ func OCROptions() AnalysisOptions {
 	opts := DefaultOptions()
 	opts.OCRMode = true
 	opts.QualityMode = true
-	opts.BlurThreshold = 300.0 // Stricter blur detection for OCR
+	opts.BlurThreshold = 300.0  // Stricter blur detection for OCR
 	opts.SkipQRDetection = true // QR codes not relevant for OCR
 	opts.OCRLanguage = "eng"
 	opts.OCREngineMode = "accurate"

@@ -10,12 +10,12 @@ import (
 )
 
 type Config struct {
-	Host                string
-	Port                string
-	RequestTimeout      time.Duration
-	ImageFetchTimeout   time.Duration
-	AnalysisTimeout     time.Duration
-	MaxRequestBodySize  int64
+	Host               string
+	Port               string
+	RequestTimeout     time.Duration
+	ImageFetchTimeout  time.Duration
+	AnalysisTimeout    time.Duration
+	MaxRequestBodySize int64
 }
 
 func (c *Config) ServerAddress() string {
@@ -28,12 +28,12 @@ func (c *Config) ServerAddress() string {
 func LoadFromEnv() (*Config, error) {
 	// Set defaults
 	cfg := &Config{
-		Host:                getEnvOrDefault("HOST", "0.0.0.0"),
-		Port:                getEnvOrDefault("PORT", "8080"),
-		RequestTimeout:      parseDurationOrDefault("REQUEST_TIMEOUT", 30*time.Second),
-		ImageFetchTimeout:   parseDurationOrDefault("IMAGE_FETCH_TIMEOUT", 15*time.Second),
-		AnalysisTimeout:     parseDurationOrDefault("ANALYSIS_TIMEOUT", 20*time.Second),
-		MaxRequestBodySize:  parseIntOrDefault("MAX_REQUEST_BODY_SIZE", 10*1024*1024), // 10MB
+		Host:               getEnvOrDefault("HOST", "0.0.0.0"),
+		Port:               getEnvOrDefault("PORT", "8080"),
+		RequestTimeout:     parseDurationOrDefault("REQUEST_TIMEOUT", 30*time.Second),
+		ImageFetchTimeout:  parseDurationOrDefault("IMAGE_FETCH_TIMEOUT", 15*time.Second),
+		AnalysisTimeout:    parseDurationOrDefault("ANALYSIS_TIMEOUT", 20*time.Second),
+		MaxRequestBodySize: parseIntOrDefault("MAX_REQUEST_BODY_SIZE", 10*1024*1024), // 10MB
 	}
 
 	// Validate port is numeric and in range

@@ -12,7 +12,7 @@ import (
 // metricsCalculator implements MetricsCalculator interface with Gonum optimizations
 // Implements optimizations from PERFORMANCE_OPTIMIZATION_ANALYSIS.md Phase 2
 type metricsCalculator struct {
-	slicePool  sync.Pool
+	slicePool sync.Pool
 }
 
 // NewMetricsCalculator creates a new metrics calculator using Gonum
@@ -30,7 +30,7 @@ func NewMetricsCalculator() MetricsCalculator {
 func (omc *metricsCalculator) CalculateBasicMetrics(img image.Image) metrics {
 	bounds := img.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
-	
+
 	// Handle empty images
 	if width == 0 || height == 0 {
 		return metrics{}
@@ -163,7 +163,7 @@ func (omc *metricsCalculator) CalculateLaplacianVariance(gray *image.Gray) float
 func (omc *metricsCalculator) CalculateBrightness(gray *image.Gray) float64 {
 	bounds := gray.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
-	
+
 	// Handle empty images
 	if width == 0 || height == 0 {
 		return 0

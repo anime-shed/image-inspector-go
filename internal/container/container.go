@@ -2,23 +2,24 @@ package container
 
 import (
 	"fmt"
+	"net/http"
+
 	"github.com/anime-shed/image-inspector-go/internal/analyzer"
 	"github.com/anime-shed/image-inspector-go/internal/config"
 	"github.com/anime-shed/image-inspector-go/internal/repository"
 	"github.com/anime-shed/image-inspector-go/internal/service"
 	"github.com/anime-shed/image-inspector-go/internal/storage"
 	"github.com/anime-shed/image-inspector-go/internal/transport"
-	"net/http"
 )
 
 // Container holds all application dependencies using dependency injection
 type Container struct {
-	config                     *config.Config
-	imageFetcher              storage.ImageFetcher
-	imageAnalyzer             analyzer.ImageAnalyzer
-	imageRepository           repository.ImageRepository
-	analysisService    service.ImageAnalysisService
-	handler                   http.Handler
+	config          *config.Config
+	imageFetcher    storage.ImageFetcher
+	imageAnalyzer   analyzer.ImageAnalyzer
+	imageRepository repository.ImageRepository
+	analysisService service.ImageAnalysisService
+	handler         http.Handler
 }
 
 // NewContainer creates and initializes all dependencies using dependency injection

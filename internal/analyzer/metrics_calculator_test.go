@@ -99,7 +99,7 @@ func TestCalculateLaplacianVariance_UniformImage(t *testing.T) {
 	for y := 0; y < 100; y++ {
 		for x := 0; x < 100; x++ {
 			if x < 50 {
-				gray.Set(x, y, color.Gray{0})   // Black half
+				gray.Set(x, y, color.Gray{0}) // Black half
 			} else {
 				gray.Set(x, y, color.Gray{255}) // White half
 			}
@@ -153,7 +153,7 @@ func TestDetectSkew(t *testing.T) {
 	for y := 0; y < 100; y++ {
 		for x := 0; x < 100; x++ {
 			if y < 50 {
-				gray.Set(x, y, color.Gray{0})   // Top half black
+				gray.Set(x, y, color.Gray{0}) // Top half black
 			} else {
 				gray.Set(x, y, color.Gray{255}) // Bottom half white
 			}
@@ -219,10 +219,10 @@ func TestRgbToHSV(t *testing.T) {
 	t.Skip("Skipping internal implementation test")
 
 	testCases := []struct {
-		name string
-		r, g, b float64
+		name                            string
+		r, g, b                         float64
 		expectedH, expectedS, expectedV float64
-		tolerance float64
+		tolerance                       float64
 	}{
 		{"Pure Red", 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0},
 		{"Pure Green", 0.0, 1.0, 0.0, 120.0, 1.0, 1.0, 5.0},

@@ -26,11 +26,11 @@ type ErrorResponse struct {
 // ImageAnalysisResponse represents the response from image analysis
 // Consolidates response structs from service and transport layers
 type ImageAnalysisResponse struct {
-	ImageURL          string     `json:"image_url"`
-	Timestamp         string     `json:"timestamp"`
-	ProcessingTimeSec float64    `json:"processing_time_sec"`
-	Quality           Quality    `json:"quality"`
+	ImageURL          string       `json:"image_url"`
+	Timestamp         string       `json:"timestamp"`
+	ProcessingTimeSec float64      `json:"processing_time_sec"`
+	Quality           Quality      `json:"quality"`
 	Metrics           ImageMetrics `json:"metrics"`
-	OCRResult         *OCRResult `json:"ocr_result,omitempty"`
-	Errors            []string   `json:"errors,omitempty"`
+	OCRResult         *OCRResult   `json:"ocr_result,omitempty"`
+	Errors            []string     `json:"errors,omitempty"`
 }

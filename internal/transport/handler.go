@@ -68,9 +68,12 @@ func analyzeImage(analysisService service.ImageAnalysisService, cfg *config.Conf
 
 		var req AnalysisRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			logger.WithError(err).WithFields(logrus.Fields{
-				"ip": c.ClientIP(),
-			}).Error("Invalid request format")
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				respondError(c, http.StatusRequestEntityTooLarge, "request body too large", err)
+				return
+			}
+			logger.WithError(err).WithFields(logrus.Fields{"ip": c.ClientIP()}).Error("Invalid request format")
 			respondError(c, http.StatusBadRequest, "invalid request format", err)
 			return
 		}
@@ -146,9 +149,12 @@ func analyzeImageWithOptions(analysisService service.ImageAnalysisService, cfg *
 
 		var req AnalysisOptionsRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			logger.WithError(err).WithFields(logrus.Fields{
-				"ip": c.ClientIP(),
-			}).Error("Invalid request format")
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				respondError(c, http.StatusRequestEntityTooLarge, "request body too large", err)
+				return
+			}
+			logger.WithError(err).WithFields(logrus.Fields{"ip": c.ClientIP()}).Error("Invalid request format")
 			respondError(c, http.StatusBadRequest, "invalid request format", err)
 			return
 		}
@@ -217,9 +223,12 @@ func detailedAnalyzeImage(analysisService service.ImageAnalysisService, cfg *con
 
 		var req models.DetailedAnalysisRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			logger.WithError(err).WithFields(logrus.Fields{
-				"ip": c.ClientIP(),
-			}).Error("Invalid request format")
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				respondError(c, http.StatusRequestEntityTooLarge, "request body too large", err)
+				return
+			}
+			logger.WithError(err).WithFields(logrus.Fields{"ip": c.ClientIP()}).Error("Invalid request format")
 			respondError(c, http.StatusBadRequest, "invalid request format", err)
 			return
 		}
@@ -268,7 +277,7 @@ func requestSizeLimiter(maxBytes int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
 		c.Next()
-		
+
 		// Check if request body was too large
 		if len(c.Errors) > 0 {
 			for _, err := range c.Errors {

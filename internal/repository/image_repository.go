@@ -3,13 +3,14 @@ package repository
 import (
 	"context"
 	"fmt"
-	"github.com/anime-shed/image-inspector-go/internal/storage"
-	"github.com/anime-shed/image-inspector-go/pkg/validation"
 	"image"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/anime-shed/image-inspector-go/internal/storage"
+	"github.com/anime-shed/image-inspector-go/pkg/validation"
 )
 
 // HTTPImageRepository implements ImageRepository using HTTP storage
@@ -30,6 +31,9 @@ func NewHTTPImageRepository(fetcher storage.ImageFetcher, timeout time.Duration)
 
 // FetchImage retrieves an image from a URL
 func (r *HTTPImageRepository) FetchImage(ctx context.Context, imageURL string) (image.Image, error) {
+	if err := r.validator.ValidateImageURL(imageURL); err != nil {
+		return nil, fmt.Errorf("invalid image URL: %w", err)
+	}
 	return r.fetcher.FetchImage(ctx, imageURL)
 }
 

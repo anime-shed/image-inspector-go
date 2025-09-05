@@ -10,10 +10,10 @@ var Logger *logrus.Logger
 
 func init() {
 	Logger = logrus.New()
-	
+
 	// Set output to stdout
 	Logger.SetOutput(os.Stdout)
-	
+
 	// Set log level from environment or default to Info
 	level := os.Getenv("LOG_LEVEL")
 	switch level {
@@ -26,7 +26,7 @@ func init() {
 	default:
 		Logger.SetLevel(logrus.InfoLevel)
 	}
-	
+
 	// Set JSON formatter for structured logging
 	Logger.SetFormatter(&logrus.JSONFormatter{
 		TimestampFormat: "2006-01-02T15:04:05.000Z07:00",

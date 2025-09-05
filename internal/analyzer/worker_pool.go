@@ -114,7 +114,7 @@ func (owp *WorkerPool) Submit(job func()) bool {
 		// If submission fails, we need to decrement the WaitGroup
 		owp.wg.Done()
 		atomic.AddInt64(&owp.totalJobs, -1) // Decrement total jobs counter
-		return false // Job rejected due to full queue
+		return false                        // Job rejected due to full queue
 	}
 }
 
@@ -127,14 +127,14 @@ func (owp *WorkerPool) SubmitWithTimeout(job func(), timeout time.Duration) bool
 	if owp.closed {
 		return false
 	}
-	
+
 	// Increment WaitGroup before attempting to submit
 	owp.wg.Add(1)
 	owp.incrementTotalJobs()
-	
+
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
-	
+
 	select {
 	case owp.jobQueue <- job:
 		return true

@@ -2,12 +2,13 @@ package service
 
 import (
 	"context"
+	"image"
+	"strings"
+
 	"github.com/anime-shed/image-inspector-go/internal/analyzer"
 	apperrors "github.com/anime-shed/image-inspector-go/internal/errors"
 	"github.com/anime-shed/image-inspector-go/internal/repository"
 	"github.com/anime-shed/image-inspector-go/pkg/models"
-	"image"
-	"strings"
 )
 
 // ImageAnalysisService defines the interface for both basic and detailed image analysis
@@ -315,10 +316,10 @@ func (s *imageAnalysisService) convertToDetailedResponse(ctx context.Context, re
 				skipped = append(skipped, "edge_detection")
 			}
 			return models.ProcessingDetails{
-				AnalysisMode:      mode,
-				FeaturesAnalyzed:  features,
-				SkippedFeatures:   skipped,
-				ProcessingOptions: map[string]interface{}{"use_worker_pool": options.UseWorkerPool, "max_workers": options.MaxWorkers},
+				AnalysisMode:       mode,
+				FeaturesAnalyzed:   features,
+				SkippedFeatures:    skipped,
+				ProcessingOptions:  map[string]interface{}{"use_worker_pool": options.UseWorkerPool, "max_workers": options.MaxWorkers},
 				PerformanceMetrics: models.PerformanceMetrics{},
 			}
 		}(),

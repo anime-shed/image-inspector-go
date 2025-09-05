@@ -5,13 +5,13 @@ import (
 	"crypto/tls"
 	"fmt"
 	"image"
-	"io"
-	"net"
-	"net/url"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -115,7 +115,7 @@ func (h *HTTPImageFetcher) FetchImage(ctx context.Context, imageURL string) (ima
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, fmt.Errorf("invalid URL: only http/https with host are allowed")
 	}
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)

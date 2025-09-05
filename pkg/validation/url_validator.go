@@ -3,6 +3,7 @@ package validation
 import (
 	"net/url"
 	"strings"
+
 	apperrors "github.com/anime-shed/image-inspector-go/internal/errors"
 )
 
