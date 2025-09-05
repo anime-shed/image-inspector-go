@@ -16,13 +16,15 @@ import (
 type HTTPImageRepository struct {
 	fetcher   storage.ImageFetcher
 	validator *validation.URLValidator
+	timeout   time.Duration
 }
 
 // NewHTTPImageRepository creates a new HTTP-based image repository
-func NewHTTPImageRepository(fetcher storage.ImageFetcher) ImageRepository {
+func NewHTTPImageRepository(fetcher storage.ImageFetcher, timeout time.Duration) ImageRepository {
 	return &HTTPImageRepository{
 		fetcher:   fetcher,
 		validator: validation.NewURLValidator(),
+		timeout:   timeout,
 	}
 }
 
@@ -38,13 +40,25 @@ func (r *HTTPImageRepository) ValidateImageURL(imageURL string) error {
 
 // GetImageMetadata retrieves metadata about an image without downloading it
 func (r *HTTPImageRepository) GetImageMetadata(ctx context.Context, imageURL string) (*ImageMetadata, error) {
+	// Validate URL before making any network calls
+	if err := r.validator.ValidateImageURL(imageURL); err != nil {
+		return nil, fmt.Errorf("invalid image URL: %w", err)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "HEAD", imageURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
 	}
 
 	client := &http.Client{
-		Timeout: 10 * time.Second, // TODO: Make this configurable via DI
+		Timeout: r.timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return fmt.Errorf("too many redirects (limit: 3)")
+			}
+			// Re-validate redirect URL to prevent SSRF via redirects
+			return r.validator.ValidateImageURL(req.URL.String())
+		},
 	}
 
 	resp, err := client.Do(req)

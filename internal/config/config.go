@@ -70,7 +70,12 @@ func parseDurationOrDefault(key string, defaultValue time.Duration) time.Duratio
 func parseIntOrDefault(key string, defaultValue int64) int64 {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64); err == nil {
-			return intValue
+			// Ensure positive values for size/count configurations
+			if intValue > 0 {
+				return intValue
+			}
+			// Log warning for non-positive values and use default
+			fmt.Fprintf(os.Stderr, "Warning: %s must be positive, got %d, using default %d\n", key, intValue, defaultValue)
 		}
 	}
 	return defaultValue

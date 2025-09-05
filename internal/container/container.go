@@ -1,6 +1,7 @@
 package container
 
 import (
+	"fmt"
 	"github.com/anime-shed/image-inspector-go/internal/analyzer"
 	"github.com/anime-shed/image-inspector-go/internal/config"
 	"github.com/anime-shed/image-inspector-go/internal/repository"
@@ -22,6 +23,11 @@ type Container struct {
 
 // NewContainer creates and initializes all dependencies using dependency injection
 func NewContainer(cfg *config.Config) (*Container, error) {
+	// Add nil config guard
+	if cfg == nil {
+		return nil, fmt.Errorf("config cannot be nil")
+	}
+
 	// Create image fetcher
 	imageFetcher := storage.NewHTTPImageFetcher(cfg.ImageFetchTimeout)
 
@@ -32,7 +38,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	}
 
 	// Create image repository
-	imageRepository := repository.NewHTTPImageRepository(imageFetcher)
+	imageRepository := repository.NewHTTPImageRepository(imageFetcher, cfg.ImageFetchTimeout)
 
 	// Create analysis service (single service for both endpoints)
 	analysisService := service.NewImageAnalysisService(imageRepository, imageAnalyzer)

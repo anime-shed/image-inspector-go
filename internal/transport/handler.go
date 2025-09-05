@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -33,6 +32,11 @@ type ErrorResponse = models.ErrorResponse
 
 func NewHandler(analysisService service.ImageAnalysisService, cfg *config.Config) http.Handler {
 	r := gin.Default()
+
+	// Set trusted proxies for security
+	if err := r.SetTrustedProxies([]string{"127.0.0.1", "::1"}); err != nil {
+		logger.WithError(err).Warn("Failed to set trusted proxies")
+	}
 
 	// Add middleware
 	r.Use(
@@ -264,6 +268,19 @@ func requestSizeLimiter(maxBytes int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
 		c.Next()
+		
+		// Check if request body was too large
+		if len(c.Errors) > 0 {
+			for _, err := range c.Errors {
+				if strings.Contains(err.Error(), "request body too large") {
+					c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, ErrorResponse{
+						Error:   "Request Entity Too Large",
+						Message: "Request body exceeds maximum allowed size",
+					})
+					return
+				}
+			}
+		}
 	}
 }
 
@@ -271,7 +288,8 @@ func errorHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
 
-		if len(c.Errors) > 0 {
+		// Only handle errors if response hasn't been written yet
+		if len(c.Errors) > 0 && !c.Writer.Written() {
 			ge := c.Errors.Last()
 			baseErr := ge.Err
 			if baseErr == nil {
@@ -300,7 +318,7 @@ func determineStatusCode(err error) int {
 }
 
 func respondError(c *gin.Context, code int, message string, err error) {
-	// Log the error with context
+	// Log the error with context (include full error details in logs)
 	logger.WithError(err).WithFields(logrus.Fields{
 		"status_code": code,
 		"message":     message,
@@ -309,8 +327,18 @@ func respondError(c *gin.Context, code int, message string, err error) {
 		"ip":          c.ClientIP(),
 	}).Error("Request failed")
 
+	// Sanitize error message for client response to prevent information leakage
+	clientMessage := message
+	if code >= 500 {
+		// For server errors, don't expose internal details
+		clientMessage = "Internal server error occurred"
+	} else if appErr, ok := err.(*apperrors.AppError); ok {
+		// For application errors, use the safe message
+		clientMessage = appErr.Message
+	}
+
 	c.AbortWithStatusJSON(code, ErrorResponse{
 		Error:   http.StatusText(code),
-		Message: fmt.Sprintf("%s: %v", message, err),
+		Message: clientMessage,
 	})
 }

@@ -4,21 +4,28 @@ Go Image Analyzer is a web server application written in Go that fetches images 
 
 ## Features
 
-- Fetch images from specified URLs
-- Analyze images for:
-  - Overexposure
-  - Oversaturation
-  - Incorrect white balance
-  - Blurriness
+- **Secure Image Fetching**: Fetch images from specified URLs with built-in SSRF protection
+- **Comprehensive Image Analysis**:
+  - Overexposure detection
+  - Oversaturation detection
+  - Incorrect white balance detection
+  - Blurriness assessment
   - Laplacian variance (measure of sharpness)
-  - Average luminance
-  - Average saturation
-  - Channel balance (red, green, blue)
-- OCR quality validation:
+  - Average luminance calculation
+  - Average saturation measurement
+  - Channel balance analysis (red, green, blue)
+- **OCR Quality Validation**:
   - Image quality assessment for OCR readiness
   - Word Error Rate (WER) calculation (when OCR is available)
   - Character Error Rate (CER) calculation (when OCR is available)
   - Detailed error reporting for image quality issues during OCR processing
+- **Security Features**:
+  - SSRF (Server-Side Request Forgery) protection
+  - URL validation and sanitization
+  - Private/loopback IP address blocking
+  - Redirect validation and limiting
+  - Request size limiting
+  - Error message sanitization
 
 ## OCR Quality Validation
 
@@ -39,7 +46,7 @@ If any of these conditions fail, the API response will include an "Errors" field
 
 ## Prerequisites
 
-- [Go](https://golang.org/doc/install) 1.16 or higher
+- [Go](https://golang.org/doc/install) 1.25 or higher
 - [Docker](https://docs.docker.com/get-docker/) (optional, for containerization)
 
 ## Installation
@@ -74,9 +81,31 @@ If any of these conditions fail, the API response will include an "Errors" field
 
 The application can be configured using environment variables. The following variables are available:
 
-- `HOST`: The host address on which the server will listen (default: `0.0.0.0`).
-- `PORT`: The port on which the server will listen (default: `8080`).
-- `GIN_MODE`: The mode in which Gin should run (e.g., `release` for production).
+- `HOST`: The host address on which the server will listen (default: `0.0.0.0`)
+- `PORT`: The port on which the server will listen (default: `8080`)
+- `GIN_MODE`: The mode in which Gin should run (e.g., `release` for production)
+- `MAX_REQUEST_BODY_SIZE`: Maximum request body size in bytes (default: `10485760` - 10MB)
+- `REQUEST_TIMEOUT`: Request timeout duration (default: `30s`)
+- `READ_TIMEOUT`: HTTP read timeout (default: `10s`)
+- `WRITE_TIMEOUT`: HTTP write timeout (default: `10s`)
+
+## Security
+
+This application includes several security features to protect against common vulnerabilities:
+
+### SSRF Protection
+- Validates URL schemes (only allows `http` and `https`)
+- Blocks requests to private IP ranges (RFC 1918)
+- Blocks requests to loopback addresses
+- Blocks requests to link-local addresses
+- Validates redirect URLs to prevent SSRF via redirects
+- Limits the number of redirects (maximum 3)
+
+### Input Validation
+- Request size limiting to prevent DoS attacks
+- URL format validation
+- Configuration validation with safe defaults
+- Error message sanitization to prevent information leakage
 
 ## API Endpoints
 

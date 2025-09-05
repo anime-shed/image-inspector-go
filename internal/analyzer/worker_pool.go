@@ -73,15 +73,15 @@ func (owp *WorkerPool) worker(workerID int) {
 	for job := range owp.jobQueue {
 		// Process the job
 		func() {
+			// Recover first in defer as recommended
 			defer func() {
-				owp.decrementActiveWorkers()
-				// Signal job completion - moved inside the job execution
-				owp.wg.Done()
-				
 				if r := recover(); r != nil {
 					// Enhanced panic recovery with logging capability
 					// In production, this would log the panic details
 				}
+				owp.decrementActiveWorkers()
+				// Signal job completion - moved inside the job execution
+				owp.wg.Done()
 			}()
 
 			// Execute the job
@@ -159,10 +159,14 @@ func (owp *WorkerPool) WaitWithTimeout(timeout time.Duration) bool {
 		close(done)
 	}()
 
+	// Use stoppable timer to prevent leaks under heavy load
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
 	select {
 	case <-done:
 		return true
-	case <-time.After(timeout):
+	case <-timer.C:
 		return false
 	}
 }
@@ -170,21 +174,25 @@ func (owp *WorkerPool) WaitWithTimeout(timeout time.Duration) bool {
 // Close shuts down the worker pool gracefully
 func (owp *WorkerPool) Close() {
 	owp.mu.Lock()
-	defer owp.mu.Unlock()
-
 	if owp.closed {
+		owp.mu.Unlock()
 		return
 	}
-
 	owp.closed = true
-	// Wait for all submitted jobs to complete before closing the channel
-	owp.wg.Wait()
+	// Close under write lock to serialize against Submit's RLock/sends.
 	close(owp.jobQueue)
+	owp.mu.Unlock()
+	// Wait outside the lock to avoid deadlocks with Submit() from running jobs.
+	owp.wg.Wait()
 }
 
 // GetBuffer retrieves a reusable byte buffer from the pool
 func (owp *WorkerPool) GetBuffer() []byte {
-	return owp.bufferPool.Get().([]byte)
+	if buf := owp.bufferPool.Get(); buf != nil {
+		return buf.([]byte)
+	}
+	// Nil-safe fallback
+	return make([]byte, 0, 4096)
 }
 
 // PutBuffer returns a byte buffer to the pool
@@ -197,7 +205,11 @@ func (owp *WorkerPool) PutBuffer(buf []byte) {
 
 // GetSlice retrieves a reusable float64 slice from the pool
 func (owp *WorkerPool) GetSlice() []float64 {
-	return owp.slicePool.Get().([]float64)
+	if slice := owp.slicePool.Get(); slice != nil {
+		return slice.([]float64)
+	}
+	// Nil-safe fallback
+	return make([]float64, 0, 1024)
 }
 
 // PutSlice returns a float64 slice to the pool
@@ -210,13 +222,21 @@ func (owp *WorkerPool) PutSlice(slice []float64) {
 
 // GetMatrix retrieves a reusable matrix from the pool
 func (owp *WorkerPool) GetMatrix() [][]float64 {
-	return owp.matrixPool.Get().([][]float64)
+	if matrix := owp.matrixPool.Get(); matrix != nil {
+		return matrix.([][]float64)
+	}
+	// Nil-safe fallback
+	return make([][]float64, 0, 16)
 }
 
 // PutMatrix returns a matrix to the pool
 func (owp *WorkerPool) PutMatrix(matrix [][]float64) {
 	const maxRows = 1024
 	if cap(matrix) <= maxRows {
+		// Address potential memory pinning by clearing slice references
+		for i := range matrix {
+			matrix[i] = nil
+		}
 		owp.matrixPool.Put(matrix[:0]) // Reset length but keep capacity
 	}
 }

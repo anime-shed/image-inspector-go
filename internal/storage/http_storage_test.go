@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -98,8 +99,24 @@ func TestHTTPImageFetcher_RetryLogic(t *testing.T) {
 			}))
 			defer server.Close()
 
-			// Create fetcher
-			fetcher := NewHTTPImageFetcher(30 * time.Second)
+			// Create fetcher with test-friendly dialer that allows localhost
+			fetcher := &HTTPImageFetcher{
+				client: &http.Client{
+					Timeout: 30 * time.Second,
+					Transport: &http.Transport{
+						DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+							// Allow localhost for testing
+							return (&net.Dialer{}).DialContext(ctx, network, addr)
+						},
+					},
+					CheckRedirect: func(req *http.Request, via []*http.Request) error {
+						if len(via) >= 3 {
+							return fmt.Errorf("stopped after 3 redirects")
+						}
+						return nil
+					},
+				},
+			}
 
 			// Test the fetch
 			ctx := context.Background()
@@ -159,7 +176,24 @@ func TestHTTPImageFetcher_NetworkError_Retry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fetcher := NewHTTPImageFetcher(30 * time.Second)
+	// Create fetcher with test-friendly dialer that allows localhost
+	fetcher := &HTTPImageFetcher{
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					// Allow localhost for testing
+					return (&net.Dialer{}).DialContext(ctx, network, addr)
+				},
+			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= 3 {
+					return fmt.Errorf("stopped after 3 redirects")
+				}
+				return nil
+			},
+		},
+	}
 	ctx := context.Background()
 
 	start := time.Now()

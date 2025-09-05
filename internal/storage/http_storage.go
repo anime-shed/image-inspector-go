@@ -7,6 +7,7 @@ import (
 	"image"
 	"io"
 	"net"
+	"net/url"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
@@ -42,24 +43,41 @@ func NewHTTPImageFetcher(fetchTimeout time.Duration) ImageFetcher {
 		DisableCompression:     false, // Enable compression for images
 		MaxResponseHeaderBytes: 16384, // Increased from 4096 for larger headers
 
-		// SSRF protection - block private IP ranges
+		// SSRF protection - resolve with context, dial vetted IP, and verify final remote IP
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			host, port, err := net.SplitHostPort(addr)
 			if err != nil {
 				return nil, err
 			}
-			
-			// Check if the IP is private or reserved
-			if isPrivateOrLoopback(host) {
-				return nil, fmt.Errorf("blocked private address: %s", host)
+			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, fmt.Errorf("dns lookup failed: %w", err)
 			}
-			
-			// Use default dialer for allowed addresses
+			var target net.IP
+			for _, ipa := range ips {
+				if isPrivateOrLoopback(ipa.IP.String()) {
+					return nil, fmt.Errorf("blocked private address: %s", ipa.IP.String())
+				}
+				if target == nil {
+					target = ipa.IP
+				}
+			}
+			if target == nil {
+				return nil, fmt.Errorf("no public IPs found for host %q", host)
+			}
 			d := &net.Dialer{
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
 			}
-			return d.DialContext(ctx, network, net.JoinHostPort(host, port))
+			c, err := d.DialContext(ctx, network, net.JoinHostPort(target.String(), port))
+			if err != nil {
+				return nil, err
+			}
+			if ra, ok := c.RemoteAddr().(*net.TCPAddr); ok && ra != nil && isPrivateOrLoopback(ra.IP.String()) {
+				_ = c.Close()
+				return nil, fmt.Errorf("blocked private address after dial: %s", ra.IP.String())
+			}
+			return c, nil
 		},
 
 		// TLS configuration with proper security
@@ -73,10 +91,17 @@ func NewHTTPImageFetcher(fetchTimeout time.Duration) ImageFetcher {
 			Transport: transport,
 			Timeout:   fetchTimeout,
 
-			// Limit redirects to avoid unexpected behavior
+			// Limit redirects and validate redirect URLs to prevent SSRF via redirects
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 3 {
 					return fmt.Errorf("too many redirects (limit: 3)")
+				}
+				// Validate redirect URL to prevent SSRF
+				if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+					return fmt.Errorf("invalid redirect scheme: %s", req.URL.Scheme)
+				}
+				if req.URL.Host == "" {
+					return fmt.Errorf("invalid redirect: missing host")
 				}
 				return nil
 			},
@@ -85,7 +110,13 @@ func NewHTTPImageFetcher(fetchTimeout time.Duration) ImageFetcher {
 }
 
 func (h *HTTPImageFetcher) FetchImage(ctx context.Context, imageURL string) (image.Image, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", imageURL, nil)
+	// Validate URL scheme and host before making any requests
+	u, err := url.Parse(imageURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, fmt.Errorf("invalid URL: only http/https with host are allowed")
+	}
+	
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
 	}
@@ -101,9 +132,11 @@ func (h *HTTPImageFetcher) FetchImage(ctx context.Context, imageURL string) (ima
 
 	for attempt := 0; attempt < 3; attempt++ {
 		resp, err = h.client.Do(req)
-
-		// Always capture the last non-nil error
 		if err != nil {
+			if ctx.Err() != nil { // cancelled or deadline exceeded
+				lastErr = ctx.Err()
+				break
+			}
 			lastErr = err
 		}
 
@@ -172,40 +205,13 @@ func (h *HTTPImageFetcher) FetchImage(ctx context.Context, imageURL string) (ima
 	return img, nil
 }
 
-// isPrivateOrLoopback checks if an IP address is private, loopback, or link-local
-// For testing purposes, we allow localhost (127.0.0.1) but block other private addresses
+// isPrivateOrLoopback reports whether the given IP (string form) is non-public.
+// Expect a literal IP string; DNS resolution is handled by the dialer.
 func isPrivateOrLoopback(host string) bool {
-	// Allow localhost for testing
-	if host == "127.0.0.1" || host == "localhost" {
-		return false
-	}
-	
-	// Try to parse as IP first
-	if ip := net.ParseIP(host); ip != nil {
-		// Block other loopback addresses
-		if ip.IsLoopback() && host != "127.0.0.1" {
-			return true
-		}
-		return ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
-	}
-	
-	// If it's not a direct IP, try to resolve it
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		// If we can't resolve it, be conservative and block it
+	ip := net.ParseIP(host)
+	if ip == nil {
+		// Be conservative; callers should pass literal IPs.
 		return true
 	}
-	
-	// Check if any of the resolved IPs are private (but allow localhost)
-	for _, ip := range ips {
-		// Allow localhost IPs
-		if ip.String() == "127.0.0.1" {
-			return false
-		}
-		if ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-			return true
-		}
-	}
-	
-	return false
+	return ip.IsLoopback() || ip.IsUnspecified() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
 }
