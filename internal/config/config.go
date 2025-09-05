@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -17,7 +19,10 @@ type Config struct {
 }
 
 func (c *Config) ServerAddress() string {
-	return fmt.Sprintf("%s:%s", c.Host, c.Port)
+	// Trim any whitespace from host and port
+	host := strings.TrimSpace(c.Host)
+	port := strings.TrimSpace(c.Port)
+	return net.JoinHostPort(host, port)
 }
 
 func LoadFromEnv() (*Config, error) {
@@ -31,6 +36,18 @@ func LoadFromEnv() (*Config, error) {
 		MaxRequestBodySize: parseIntOrDefault("MAX_REQUEST_BODY_SIZE", 10*1024*1024), // 10MB
 	}
 
+	// Validate port is numeric and in range
+	p, err := strconv.Atoi(strings.TrimSpace(cfg.Port))
+	if err != nil || p < 1 || p > 65535 {
+		return nil, fmt.Errorf("invalid PORT: %q", cfg.Port)
+	}
+	if cfg.MaxRequestBodySize <= 0 {
+		return nil, fmt.Errorf("MAX_REQUEST_BODY_SIZE must be > 0 (got %d)", cfg.MaxRequestBodySize)
+	}
+	if cfg.RequestTimeout <= 0 || cfg.ImageFetchTimeout <= 0 || cfg.AnalysisTimeout <= 0 {
+		return nil, fmt.Errorf("timeouts must be > 0 (got request=%s, fetch=%s, analysis=%s)",
+			cfg.RequestTimeout, cfg.ImageFetchTimeout, cfg.AnalysisTimeout)
+	}
 	return cfg, nil
 }
 
@@ -43,7 +60,7 @@ func getEnvOrDefault(key, defaultValue string) string {
 
 func parseDurationOrDefault(key string, defaultValue time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
-		if duration, err := time.ParseDuration(value); err == nil {
+		if duration, err := time.ParseDuration(strings.TrimSpace(value)); err == nil && duration > 0 {
 			return duration
 		}
 	}
@@ -52,8 +69,13 @@ func parseDurationOrDefault(key string, defaultValue time.Duration) time.Duratio
 
 func parseIntOrDefault(key string, defaultValue int64) int64 {
 	if value := os.Getenv(key); value != "" {
-		if intValue, err := strconv.ParseInt(value, 10, 64); err == nil {
-			return intValue
+		if intValue, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64); err == nil {
+			// Ensure positive values for size/count configurations
+			if intValue > 0 {
+				return intValue
+			}
+			// Log warning for non-positive values and use default
+			fmt.Fprintf(os.Stderr, "Warning: %s must be positive, got %d, using default %d\n", key, intValue, defaultValue)
 		}
 	}
 	return defaultValue

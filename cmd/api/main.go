@@ -9,27 +9,31 @@ import (
 	"syscall"
 	"time"
 
-	"go-image-inspector/internal/container"
-	"go-image-inspector/internal/transport"
+	"github.com/anime-shed/image-inspector-go/internal/config"
+	"github.com/anime-shed/image-inspector-go/internal/container"
 
 	"github.com/sirupsen/logrus"
 )
 
 func main() {
+	// Load configuration
+	cfg, err := config.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
 	// Initialize dependency injection container
-	c, err := container.NewContainer()
+	c, err := container.NewContainer(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize container: %v", err)
 	}
-
-	cfg := c.GetConfig()
 
 	// Setup structured logging
 	logrus.SetFormatter(&logrus.JSONFormatter{})
 	logrus.SetLevel(logrus.InfoLevel)
 
-	// Create HTTP handler with dependencies from container
-	handler := transport.NewHandler(c.GetImageAnalyzer(), c.GetImageFetcher(), cfg)
+	// Get HTTP handler from container (already configured with all dependencies)
+	handler := c.Handler()
 
 	// Create HTTP server with configurable timeouts
 	server := &http.Server{

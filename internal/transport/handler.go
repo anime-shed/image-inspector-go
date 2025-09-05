@@ -2,49 +2,41 @@ package transport
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
-	"net/url"
+	"strings"
 	"time"
 
-	"go-image-inspector/internal/analyzer"
-	apperrors "go-image-inspector/internal/errors"
-	"go-image-inspector/internal/logger"
-	"go-image-inspector/internal/storage"
-	"go-image-inspector/pkg/config"
+	"github.com/anime-shed/image-inspector-go/internal/analyzer"
+	"github.com/anime-shed/image-inspector-go/internal/config"
+	apperrors "github.com/anime-shed/image-inspector-go/internal/errors"
+	"github.com/anime-shed/image-inspector-go/internal/logger"
+	"github.com/anime-shed/image-inspector-go/internal/service"
+	"github.com/anime-shed/image-inspector-go/pkg/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
 
-func validateImageURL(imageURL string) error {
-	// Parse URL
-	parsedURL, err := url.Parse(imageURL)
-	if err != nil {
-		return apperrors.NewValidationError("Invalid URL format", err)
-	}
-	// Check if host is present
-	if parsedURL.Host == "" {
-		return apperrors.NewValidationError("URL must have a valid host", nil)
-	}
+// Remove package-level validator as validation is now handled by service layer
 
-	return nil
-}
+// AnalysisRequest is now an alias to the shared models.AnalysisRequest
+type AnalysisRequest = models.AnalysisRequest
 
-type AnalysisRequest struct {
-	URL          string `json:"url" binding:"required,url"`
-	IsOCR        bool   `json:"is_ocr,omitempty"`
-	ExpectedText string `json:"expected_text,omitempty"`
-}
+// AnalysisOptionsRequest is now an alias to the shared models.AnalysisOptionsRequest
+type AnalysisOptionsRequest = models.AnalysisOptionsRequest
 
-type ErrorResponse struct {
-	Error   string `json:"error"`
-	Message string `json:"message,omitempty"`
-}
+// ErrorResponse is now an alias to the shared models.ErrorResponse
+type ErrorResponse = models.ErrorResponse
 
-func NewHandler(analyzer analyzer.ImageAnalyzer, fetcher storage.ImageFetcher, cfg *config.Config) http.Handler {
+func NewHandler(analysisService service.ImageAnalysisService, cfg *config.Config) http.Handler {
 	r := gin.Default()
+
+	// Set trusted proxies for security
+	if err := r.SetTrustedProxies([]string{"127.0.0.1", "::1"}); err != nil {
+		logger.WithError(err).Warn("Failed to set trusted proxies")
+	}
 
 	// Add middleware
 	r.Use(
@@ -54,12 +46,13 @@ func NewHandler(analyzer analyzer.ImageAnalyzer, fetcher storage.ImageFetcher, c
 
 	// Configure routes
 	r.GET("/health", healthCheck)
-	r.POST("/analyze", analyzeImage(analyzer, fetcher, cfg))
-
+	r.POST("/analyze", analyzeImage(analysisService, cfg))
+	r.POST("/analyze/options", analyzeImageWithOptions(analysisService, cfg))
+	r.POST("/detailed-analyze", detailedAnalyzeImage(analysisService, cfg))
 	return r
 }
 
-func analyzeImage(a analyzer.ImageAnalyzer, f storage.ImageFetcher, cfg *config.Config) gin.HandlerFunc {
+func analyzeImage(analysisService service.ImageAnalysisService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startTime := time.Now()
 		ctx, cancel := context.WithTimeout(c.Request.Context(), cfg.RequestTimeout)
@@ -75,77 +68,199 @@ func analyzeImage(a analyzer.ImageAnalyzer, f storage.ImageFetcher, cfg *config.
 
 		var req AnalysisRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			logger.WithError(err).WithFields(logrus.Fields{
-				"ip": c.ClientIP(),
-			}).Error("Invalid request format")
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				respondError(c, http.StatusRequestEntityTooLarge, "request body too large", err)
+				return
+			}
+			logger.WithError(err).WithFields(logrus.Fields{"ip": c.ClientIP()}).Error("Invalid request format")
 			respondError(c, http.StatusBadRequest, "invalid request format", err)
 			return
 		}
 
-		// Validate image URL
-		if err := validateImageURL(req.URL); err != nil {
-			logger.WithError(err).WithFields(logrus.Fields{
-				"url": req.URL,
-				"ip":  c.ClientIP(),
-			}).Error("Invalid image URL")
-
-			// Use custom error status code
-			statusCode := apperrors.GetStatusCode(err)
-			respondError(c, statusCode, "invalid image URL", err)
-			return
-		}
-
 		// Check for IsOCR in query parameter (takes precedence over JSON body)
-		if isOCRQuery := c.Query("IsOCR"); isOCRQuery != "" {
-			req.IsOCR = isOCRQuery == "true"
+		if v := c.Query("is_ocr"); v != "" {
+			req.IsOCR = strings.EqualFold(v, "true") || v == "1"
+		} else if v := c.Query("IsOCR"); v != "" { // backward-compat
+			req.IsOCR = strings.EqualFold(v, "true") || v == "1"
 		}
 
-		// Log image fetch attempt
+		// Log analysis attempt
 		logger.WithFields(logrus.Fields{
 			"url":    req.URL,
 			"is_ocr": req.IsOCR,
-		}).Debug("Fetching image")
+		}).Debug("Starting image analysis")
 
-		img, err := f.FetchImage(ctx, req.URL)
+		// Delegate business logic to service layer
+		var response *models.ImageAnalysisResponse
+		var err error
+
+		if req.IsOCR && req.ExpectedText != "" {
+			// Use OCR-specific analysis when expected text is provided
+			response, err = analysisService.AnalyzeImageWithOCR(ctx, req.URL, req.ExpectedText)
+		} else {
+			// Use regular analysis
+			response, err = analysisService.AnalyzeImage(ctx, req.URL, req.IsOCR)
+		}
+
 		if err != nil {
-			// Wrap network/fetch errors with custom error type
-			var fetchErr *apperrors.AppError
-			if errors.Is(err, context.DeadlineExceeded) {
-				fetchErr = apperrors.NewTimeoutError("Image fetch timeout", err)
-			} else {
-				fetchErr = apperrors.NewNetworkError("Failed to fetch image", err)
-			}
-
-			logger.WithError(fetchErr).WithFields(logrus.Fields{
+			// Log error with context
+			logger.WithError(err).WithFields(logrus.Fields{
 				"url": req.URL,
 				"ip":  c.ClientIP(),
-			}).Error("Failed to fetch image")
+			}).Error("Image analysis failed")
 
-			respondError(c, fetchErr.StatusCode, "failed to fetch image", fetchErr)
+			// Use custom error status code
+			statusCode := apperrors.GetStatusCode(err)
+			respondError(c, statusCode, "image analysis failed", err)
 			return
 		}
 
-		var result analyzer.AnalysisResult
-		if req.IsOCR {
-			// Use OCR analysis when isOCR is true
-			result = a.AnalyzeWithOCR(img, req.ExpectedText)
-		} else {
-			// Use regular analysis when isOCR is false
-			result = a.Analyze(img, false)
+		// Log successful completion
+		duration := time.Since(startTime)
+		fields := logrus.Fields{
+			"url":                req.URL,
+			"is_ocr":             req.IsOCR,
+			"processing_time_ms": duration.Milliseconds(),
+		}
+		if response != nil {
+			fields["overexposed"] = response.Quality.Overexposed
+			fields["oversaturated"] = response.Quality.Oversaturated
+			fields["blurry"] = response.Quality.Blurry
+		}
+		logger.WithFields(fields).Info("Image analysis completed successfully")
+		c.JSON(http.StatusOK, response)
+	}
+}
+
+func analyzeImageWithOptions(analysisService service.ImageAnalysisService, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		startTime := time.Now()
+		ctx, cancel := context.WithTimeout(c.Request.Context(), cfg.RequestTimeout)
+		defer cancel()
+
+		// Log request start
+		logger.WithFields(logrus.Fields{
+			"method":     c.Request.Method,
+			"path":       c.Request.URL.Path,
+			"user_agent": c.Request.UserAgent(),
+			"ip":         c.ClientIP(),
+		}).Info("Processing image analysis request with options")
+
+		var req AnalysisOptionsRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				respondError(c, http.StatusRequestEntityTooLarge, "request body too large", err)
+				return
+			}
+			logger.WithError(err).WithFields(logrus.Fields{"ip": c.ClientIP()}).Error("Invalid request format")
+			respondError(c, http.StatusBadRequest, "invalid request format", err)
+			return
+		}
+
+		// Use default options, then overlay request-provided values
+		options := analyzer.DefaultOptions()
+		if req.Options != nil {
+			if raw, mErr := json.Marshal(req.Options); mErr == nil {
+				_ = json.Unmarshal(raw, &options) // keep defaults on error
+			}
+		}
+
+		// Log analysis attempt
+		logger.WithFields(logrus.Fields{
+			"url":          req.URL,
+			"ocr_mode":     options.OCRMode,
+			"fast_mode":    options.FastMode,
+			"quality_mode": options.QualityMode,
+		}).Debug("Starting image analysis with options")
+
+		// Delegate to service layer with options
+		response, err := analysisService.AnalyzeImageWithOptions(ctx, req.URL, options)
+		if err != nil {
+			// Log error with context
+			logger.WithError(err).WithFields(logrus.Fields{
+				"url": req.URL,
+				"ip":  c.ClientIP(),
+			}).Error("Image analysis with options failed")
+
+			// Use custom error status code
+			statusCode := apperrors.GetStatusCode(err)
+			respondError(c, statusCode, "image analysis failed", err)
+			return
 		}
 
 		// Log successful completion
 		duration := time.Since(startTime)
 		logger.WithFields(logrus.Fields{
 			"url":                req.URL,
-			"is_ocr":             req.IsOCR,
+			"ocr_mode":           options.OCRMode,
+			"fast_mode":          options.FastMode,
+			"quality_mode":       options.QualityMode,
 			"processing_time_ms": duration.Milliseconds(),
-			"overexposed":        result.Overexposed,
-			"oversaturated":      result.Oversaturated,
-			"blurry":             result.Blurry,
-		}).Info("Image analysis completed successfully")
+			"overexposed":        response.Quality.Overexposed,
+			"oversaturated":      response.Quality.Oversaturated,
+			"blurry":             response.Quality.Blurry,
+		}).Info("Image analysis with options completed successfully")
 
-		c.JSON(http.StatusOK, result)
+		c.JSON(http.StatusOK, response)
+	}
+}
+
+func detailedAnalyzeImage(analysisService service.ImageAnalysisService, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		startTime := time.Now()
+		ctx, cancel := context.WithTimeout(c.Request.Context(), cfg.RequestTimeout)
+		defer cancel()
+
+		// Log request start
+		logger.WithFields(logrus.Fields{
+			"method":     c.Request.Method,
+			"path":       c.Request.URL.Path,
+			"user_agent": c.Request.UserAgent(),
+			"ip":         c.ClientIP(),
+		}).Info("Processing detailed image analysis request")
+
+		var req models.DetailedAnalysisRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				respondError(c, http.StatusRequestEntityTooLarge, "request body too large", err)
+				return
+			}
+			logger.WithError(err).WithFields(logrus.Fields{"ip": c.ClientIP()}).Error("Invalid request format")
+			respondError(c, http.StatusBadRequest, "invalid request format", err)
+			return
+		}
+
+		// Log analysis attempt
+		logger.WithFields(logrus.Fields{
+			"url": req.URL,
+		}).Debug("Starting detailed image analysis")
+
+		// Delegate to service with full request
+		response, err := analysisService.AnalyzeImageDetailed(ctx, req)
+		if err != nil {
+			// Log error with context
+			logger.WithError(err).WithFields(logrus.Fields{
+				"url": req.URL,
+				"ip":  c.ClientIP(),
+			}).Error("Detailed image analysis failed")
+
+			// Use custom error status code
+			statusCode := apperrors.GetStatusCode(err)
+			respondError(c, statusCode, "detailed image analysis failed", err)
+			return
+		}
+
+		// Log successful completion
+		duration := time.Since(startTime)
+		logger.WithFields(logrus.Fields{
+			"url":                req.URL,
+			"processing_time_ms": duration.Milliseconds(),
+		}).Info("Detailed image analysis completed successfully")
+
+		c.JSON(http.StatusOK, response)
 	}
 }
 
@@ -162,6 +277,19 @@ func requestSizeLimiter(maxBytes int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
 		c.Next()
+
+		// Check if request body was too large
+		if len(c.Errors) > 0 {
+			for _, err := range c.Errors {
+				if strings.Contains(err.Error(), "request body too large") {
+					c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, ErrorResponse{
+						Error:   "Request Entity Too Large",
+						Message: "Request body exceeds maximum allowed size",
+					})
+					return
+				}
+			}
+		}
 	}
 }
 
@@ -169,9 +297,14 @@ func errorHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
 
-		if len(c.Errors) > 0 {
-			err := c.Errors.Last()
-			respondError(c, determineStatusCode(err), "request processing failed", err)
+		// Only handle errors if response hasn't been written yet
+		if len(c.Errors) > 0 && !c.Writer.Written() {
+			ge := c.Errors.Last()
+			baseErr := ge.Err
+			if baseErr == nil {
+				baseErr = ge // fallback
+			}
+			respondError(c, determineStatusCode(baseErr), "request processing failed", baseErr)
 		}
 	}
 }
@@ -194,7 +327,7 @@ func determineStatusCode(err error) int {
 }
 
 func respondError(c *gin.Context, code int, message string, err error) {
-	// Log the error with context
+	// Log the error with context (include full error details in logs)
 	logger.WithError(err).WithFields(logrus.Fields{
 		"status_code": code,
 		"message":     message,
@@ -203,8 +336,18 @@ func respondError(c *gin.Context, code int, message string, err error) {
 		"ip":          c.ClientIP(),
 	}).Error("Request failed")
 
+	// Sanitize error message for client response to prevent information leakage
+	clientMessage := message
+	if code >= 500 {
+		// For server errors, don't expose internal details
+		clientMessage = "Internal server error occurred"
+	} else if appErr, ok := err.(*apperrors.AppError); ok {
+		// For application errors, use the safe message
+		clientMessage = appErr.Message
+	}
+
 	c.AbortWithStatusJSON(code, ErrorResponse{
 		Error:   http.StatusText(code),
-		Message: fmt.Sprintf("%s: %v", message, err),
+		Message: clientMessage,
 	})
 }

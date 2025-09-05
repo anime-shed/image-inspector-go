@@ -2,75 +2,81 @@ package container
 
 import (
 	"fmt"
-	"go-image-inspector/internal/analyzer"
-	"go-image-inspector/internal/repository"
-	"go-image-inspector/internal/service"
-	"go-image-inspector/internal/storage"
-	"go-image-inspector/pkg/config"
+	"net/http"
+
+	"github.com/anime-shed/image-inspector-go/internal/analyzer"
+	"github.com/anime-shed/image-inspector-go/internal/config"
+	"github.com/anime-shed/image-inspector-go/internal/repository"
+	"github.com/anime-shed/image-inspector-go/internal/service"
+	"github.com/anime-shed/image-inspector-go/internal/storage"
+	"github.com/anime-shed/image-inspector-go/internal/transport"
 )
 
-// Container holds all application dependencies
+// Container holds all application dependencies using dependency injection
 type Container struct {
-	Config               *config.Config
-	ImageFetcher         storage.ImageFetcher
-	ImageAnalyzer        analyzer.ImageAnalyzer
-	ImageRepository      repository.ImageRepository
-	ImageAnalysisService service.ImageAnalysisService
+	config          *config.Config
+	imageFetcher    storage.ImageFetcher
+	imageAnalyzer   analyzer.ImageAnalyzer
+	imageRepository repository.ImageRepository
+	analysisService service.ImageAnalysisService
+	handler         http.Handler
 }
 
-// NewContainer creates a new dependency injection container
-func NewContainer() (*Container, error) {
-	// Load configuration
-	cfg, err := config.LoadFromEnv()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
+// NewContainer creates and initializes all dependencies using dependency injection
+func NewContainer(cfg *config.Config) (*Container, error) {
+	// Add nil config guard
+	if cfg == nil {
+		return nil, fmt.Errorf("config cannot be nil")
 	}
 
 	// Create image fetcher
-	imageFetcher := storage.NewHTTPImageFetcher()
+	imageFetcher := storage.NewHTTPImageFetcher(cfg.ImageFetchTimeout)
 
-	// Create image analyzer
-	imageAnalyzer, err := analyzer.NewImageAnalyzer()
+	// Create single image analyzer (remove duplication)
+	imageAnalyzer, err := analyzer.NewCoreAnalyzer()
 	if err != nil {
 		return nil, err
 	}
 
 	// Create image repository
-	imageRepository := repository.NewHTTPImageRepository(imageFetcher)
+	imageRepository := repository.NewHTTPImageRepository(imageFetcher, cfg.ImageFetchTimeout)
 
-	// Create image analysis service
-	imageAnalysisService := service.NewImageAnalysisService(imageRepository, imageAnalyzer)
+	// Create analysis service (single service for both endpoints)
+	analysisService := service.NewImageAnalysisService(imageRepository, imageAnalyzer)
+
+	// Create HTTP handler with service
+	handler := transport.NewHandler(analysisService, cfg)
 
 	return &Container{
-		Config:               cfg,
-		ImageFetcher:         imageFetcher,
-		ImageAnalyzer:        imageAnalyzer,
-		ImageRepository:      imageRepository,
-		ImageAnalysisService: imageAnalysisService,
+		config:          cfg,
+		imageFetcher:    imageFetcher,
+		imageAnalyzer:   imageAnalyzer,
+		imageRepository: imageRepository,
+		analysisService: analysisService,
+		handler:         handler,
 	}, nil
 }
 
-// GetConfig returns the configuration
-func (c *Container) GetConfig() *config.Config {
-	return c.Config
+// Handler returns the HTTP handler
+func (c *Container) Handler() http.Handler {
+	return c.handler
 }
 
-// GetImageFetcher returns the image fetcher
-func (c *Container) GetImageFetcher() storage.ImageFetcher {
-	return c.ImageFetcher
+// Config returns the configuration
+func (c *Container) Config() *config.Config {
+	return c.config
 }
 
-// GetImageAnalyzer returns the image analyzer
-func (c *Container) GetImageAnalyzer() analyzer.ImageAnalyzer {
-	return c.ImageAnalyzer
+// GetAnalysisService returns the analysis service
+func (c *Container) GetAnalysisService() service.ImageAnalysisService {
+	return c.analysisService
 }
 
-// GetImageRepository returns the image repository
-func (c *Container) GetImageRepository() repository.ImageRepository {
-	return c.ImageRepository
-}
-
-// GetImageAnalysisService returns the image analysis service
-func (c *Container) GetImageAnalysisService() service.ImageAnalysisService {
-	return c.ImageAnalysisService
+// Close shuts down the container and releases resources
+func (c *Container) Close() error {
+	// Close the image analyzer if it has a Close method
+	if closer, ok := c.imageAnalyzer.(interface{ Close() error }); ok {
+		return closer.Close()
+	}
+	return nil
 }

@@ -4,21 +4,28 @@ Go Image Analyzer is a web server application written in Go that fetches images 
 
 ## Features
 
-- Fetch images from specified URLs
-- Analyze images for:
-  - Overexposure
-  - Oversaturation
-  - Incorrect white balance
-  - Blurriness
+- **Secure Image Fetching**: Fetch images from specified URLs with built-in SSRF protection
+- **Comprehensive Image Analysis**:
+  - Overexposure detection
+  - Oversaturation detection
+  - Incorrect white balance detection
+  - Blurriness assessment
   - Laplacian variance (measure of sharpness)
-  - Average luminance
-  - Average saturation
-  - Channel balance (red, green, blue)
-- OCR quality validation:
+  - Average luminance calculation
+  - Average saturation measurement
+  - Channel balance analysis (red, green, blue)
+- **OCR Quality Validation**:
   - Image quality assessment for OCR readiness
   - Word Error Rate (WER) calculation (when OCR is available)
   - Character Error Rate (CER) calculation (when OCR is available)
   - Detailed error reporting for image quality issues during OCR processing
+- **Security Features**:
+  - SSRF (Server-Side Request Forgery) protection
+  - URL validation and sanitization
+  - Private/loopback IP address blocking
+  - Redirect validation and limiting
+  - Request size limiting
+  - Error message sanitization
 
 ## OCR Quality Validation
 
@@ -39,7 +46,7 @@ If any of these conditions fail, the API response will include an "Errors" field
 
 ## Prerequisites
 
-- [Go](https://golang.org/doc/install) 1.16 or higher
+- [Go](https://golang.org/doc/install) 1.25 or higher
 - [Docker](https://docs.docker.com/get-docker/) (optional, for containerization)
 
 ## Installation
@@ -74,17 +81,81 @@ If any of these conditions fail, the API response will include an "Errors" field
 
 The application can be configured using environment variables. The following variables are available:
 
-- `HOST`: The host address on which the server will listen (default: `0.0.0.0`).
-- `PORT`: The port on which the server will listen (default: `8080`).
-- `GIN_MODE`: The mode in which Gin should run (e.g., `release` for production).
+- `HOST`: The host address on which the server will listen (default: `0.0.0.0`)
+- `PORT`: The port on which the server will listen (default: `8080`)
+- `GIN_MODE`: The mode in which Gin should run (e.g., `release` for production)
+- `MAX_REQUEST_BODY_SIZE`: Maximum request body size in bytes (default: `10485760` - 10MB)
+- `REQUEST_TIMEOUT`: Request timeout duration (default: `30s`)
+- `READ_TIMEOUT`: HTTP read timeout (default: `10s`)
+- `WRITE_TIMEOUT`: HTTP write timeout (default: `10s`)
+
+## Security
+
+This application includes several security features to protect against common vulnerabilities:
+
+### SSRF Protection
+- Validates URL schemes (only allows `http` and `https`)
+- Blocks requests to private IP ranges (RFC 1918)
+- Blocks requests to loopback addresses
+- Blocks requests to link-local addresses
+- Validates redirect URLs to prevent SSRF via redirects
+- Limits the number of redirects (maximum 3)
+
+### Input Validation
+- Request size limiting to prevent DoS attacks
+- URL format validation
+- Configuration validation with safe defaults
+- Error message sanitization to prevent information leakage
 
 ## API Endpoints
 
+### Basic Analysis
 - `POST /analyze`: Analyze an image with optional OCR quality validation:
-   - `url`: The URL of the image to be analyzed.
-   - `is_ocr`: (optional) Boolean flag to enable OCR quality validation.
-   - `expected_text`: (optional) This parameter is retained for API compatibility but is not used in the current version.
+  - `url`: The URL of the image to be analyzed.
+  - `is_ocr`: (optional) Boolean flag to enable OCR quality validation.
+  - `expected_text`: (optional) When provided with `is_ocr=true`, triggers the OCR-comparison flow.
 
+### Advanced Analysis Options
+- `POST /analyze/options`: Analyze an image with custom analysis options:
+  - `url`: The URL of the image to be analyzed.
+  - `options`: Object with fields (all optional unless stated):
+    - `ocr_mode` (boolean)
+    - `fast_mode` (boolean)
+    - `quality_mode` (boolean, default true)
+    - `blur_threshold` (number)
+    - `overexposure_threshold` (number)
+    - `oversaturation_threshold` (number)
+    - `luminance_threshold` (number)
+    - `skip_qr_detection` (boolean)
+    - `skip_white_balance` (boolean)
+    - `skip_contour_detection` (boolean)
+    - `skip_edge_detection` (boolean)
+    - `use_worker_pool` (boolean, default true)
+    - `max_workers` (integer, 0 = auto)
+
+Example:
+```json
+{
+  "url": "https://example.com/image.jpg",
+  "options": {
+    "quality_mode": true,
+    "ocr_mode": false,
+    "blur_threshold": 120.0,
+    "skip_qr_detection": false,
+    "use_worker_pool": true
+  }
+}
+```
+
+### Detailed Analysis (New)
+- `POST /detailed-analyze`: Comprehensive image analysis with detailed metrics and thresholds:
+  - `url`: The URL of the image to be analyzed.
+  - `analysis_mode`: (optional) "basic" | "ocr" | "comprehensive" (default: "comprehensive")
+  - `include_performance`: (optional) boolean
+  - `include_raw_metrics`: (optional) boolean
+  - `custom_thresholds`: (optional) object
+  - `feature_flags`: (optional) object of booleans
+  - `expected_text`: (optional) string (used only when `analysis_mode="ocr"`)
 ## Usage Examples
 
 ### Basic Image Analysis
@@ -103,6 +174,33 @@ curl -X POST http://localhost:8080/analyze \
   -d '{"url": "https://example.com/text-image.jpg", "is_ocr": true}'
 ```
 
+### Detailed Analysis (Comprehensive)
+
+```bash
+curl -X POST http://localhost:8080/detailed-analyze \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/image.jpg"}'
+```
+
+### Detailed Analysis with Custom Options
+
+```bash
+curl -X POST http://localhost:8080/detailed-analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/image.jpg",
+    "analysis_mode": "comprehensive",
+    "include_performance": true,
+    "include_raw_metrics": true,
+    "custom_thresholds": {
+      "min_laplacian_variance": 100.0,
+      "overexposure_threshold": 0.05,
+      "oversaturation_threshold": 0.8,
+      "min_total_pixels": 500000
+    }
+  }'
+```
+
 ## Troubleshooting
 
 ### OCR Functionality
@@ -115,10 +213,10 @@ If you need OCR text extraction functionality, please use a dedicated OCR servic
 
 If you encounter build errors:
 
-1. **Check Go version:** Ensure you have Go 1.16 or higher installed
+1. **Check Go version:** Ensure you have Go 1.25 or higher installed
 2. **Use Docker:** Build using the provided Dockerfile which includes all dependencies
 
-### Sample Response (OCR Quality Analysis)
+### Sample Response (Basic OCR Quality Analysis)
 
 ```json
 {
@@ -140,10 +238,106 @@ If you encounter build errors:
 }
 ```
 
+### Sample Response (Detailed Analysis)
+
+```json
+{
+  "image_url": "https://example.com/image.jpg",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "processing_time_sec": 1.42,
+  "image_metadata": {
+    "width": 1920,
+    "height": 1080,
+    "format": "image/jpeg",
+    "content_type": "image/jpeg",
+    "content_length": 245760
+  },
+  "quality_analysis": {
+    "overexposed": false,
+    "oversaturated": false,
+    "incorrect_white_balance": false,
+    "blurry": false,
+    "is_low_resolution": false,
+    "is_too_dark": false,
+    "is_too_bright": false,
+    "is_skewed": false,
+    "is_valid": true,
+    "is_ocr_ready": true,
+    "has_critical_issues": false,
+    "overall_quality_score": 85.5,
+    "sharpness_score": 89.2,
+    "exposure_score": 92.1,
+    "color_score": 78.3
+  },
+  "raw_metrics": {
+    "laplacian_variance": 150.0,
+    "brightness": 128.0,
+    "average_saturation": 0.5,
+    "channel_balance": [128, 128, 128],
+    "overexposed_pixel_ratio": 0.02,
+    "underexposed_pixel_ratio": 0.05,
+    "dynamic_range": 200,
+    "total_pixels": 2073600,
+    "aspect_ratio": 1.78
+  },
+  "applied_thresholds": {
+    "min_laplacian_variance": 100,
+    "overexposure_threshold": 0.1,
+    "oversaturation_threshold": 0.8,
+    "max_skew_angle": 5,
+    "min_total_pixels": 800000
+  },
+  "quality_checks": [
+    {
+      "check_name": "blur_detection",
+      "passed": true,
+      "severity": "info",
+      "actual_value": 150.0,
+      "threshold_value": 100.0,
+      "message": "Image sharpness is acceptable",
+      "confidence": 0.85
+    }
+  ],
+  "overall_assessment": {
+    "quality_grade": "B",
+    "usability_score": 85.5,
+    "suitable_for": ["web", "display", "ocr"],
+    "recommended_actions": []
+  },
+  "processing_details": {
+    "analysis_mode": "comprehensive",
+    "features_analyzed": ["sharpness", "exposure", "color", "resolution", "geometry"],
+    "performance_metrics": {
+      "total_processing_time_ms": 1420.67,
+      "image_fetch_time_ms": 1200.45,
+      "analysis_time_ms": 220.22
+    }
+  }
+}
+```
+
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request.
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Acknowledgments
+
+This project makes use of several excellent open-source libraries and tools:
+
+### Core Dependencies
+- **[Gin Web Framework](https://github.com/gin-gonic/gin)** - High-performance HTTP web framework for Go
+- **[Logrus](https://github.com/sirupsen/logrus)** - Structured logging for Go
+- **[image](https://pkg.go.dev/image)** - Go's built-in image processing package
+
+### Development Tools
+- **[Docker](https://www.docker.com/)** - Containerization platform
+- **[Alpine Linux](https://alpinelinux.org/)** - Security-oriented, lightweight Linux distribution used in Docker images
+
+### Testing & Quality
+- **[Testify](https://github.com/stretchr/testify)** - Testing toolkit for Go
+
+We are grateful to the maintainers and contributors of these projects for their excellent work that makes this image analysis service possible.
 
 ## License
 
-This project is licensed under the MIT License - see the [MIT](MIT) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
